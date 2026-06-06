@@ -5,8 +5,8 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
 
 class AIService {
-  // Thay thế bằng API Key thật của bạn lấy từ Google AI Studio
-  static const String _apiKey = '';
+  // Lấy API Key từ biến môi trường (Environment Variable) lúc build app
+  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   
   static final AIService _instance = AIService._internal();
   factory AIService() => _instance;

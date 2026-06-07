@@ -27,6 +27,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final notifService = Provider.of<NotificationService>(context, listen: false);
       final authService = Provider.of<AuthService>(context, listen: false);
+      final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+
+      // Auto-delete requests (Instagram/Facebook accounts) older than 3 days
+      final user = authService.currentUser;
+      if (user != null && user.pairId != null && user.pairId!.isNotEmpty) {
+        firestoreService.deleteExpiredRequests(user.pairId!);
+      }
+
       notifService.requestNotificationPermission().then((_) {
         // Save FCM token to mock user profile
         authService.updateFcmToken(notifService.fcmToken);
@@ -35,7 +43,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Configure notification tap behavior
       notifService.setOnNotificationTap((requestId) async {
         // Find the request and navigate to detail
-        final firestoreService = Provider.of<FirestoreService>(context, listen: false);
         final match = await firestoreService.getRequestById(requestId);
         if (match != null && mounted) {
           Navigator.pushNamed(context, '/ig_request_detail', arguments: match);
@@ -56,9 +63,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _tabs,
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: IndexedStack(
+          index: _currentIndex,
+          children: _tabs,
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,

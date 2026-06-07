@@ -460,6 +460,48 @@ class FirestoreService extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteExpiredRequests(String pairId) async {
+    final now = DateTime.now();
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+
+    try {
+      if (useFirebase) {
+        // Query requests under this pairId
+        final query = await FirebaseFirestore.instance
+            .collection('requests')
+            .where('pairId', isEqualTo: pairId)
+            .get();
+
+        for (var doc in query.docs) {
+          final data = doc.data();
+          final createdAtVal = data['createdAt'];
+          DateTime? createdAt;
+          if (createdAtVal != null) {
+            if (createdAtVal is String) {
+              createdAt = DateTime.tryParse(createdAtVal);
+            } else {
+              try {
+                createdAt = (createdAtVal.toDate() as DateTime);
+              } catch (_) {}
+            }
+          }
+
+          if (createdAt != null && createdAt.isBefore(threeDaysAgo)) {
+            await doc.reference.delete();
+            debugPrint('Auto-deleted expired request: ${doc.id}');
+          }
+        }
+      } else {
+        // In-memory mock list cleanup
+        _requests.removeWhere((r) => r.pairId == pairId && r.createdAt != null && r.createdAt!.isBefore(threeDaysAgo));
+        _notifySubscriptions();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning expired requests: $e');
+    }
+  }
+
   @override
   void dispose() {
     for (final sub in _inboxSubscriptions) {

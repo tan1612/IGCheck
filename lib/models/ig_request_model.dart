@@ -115,7 +115,7 @@ class IGRequestModel {
       thumbnailImageUrl: json['thumbnailImageUrl'] as String? ?? '',
       originalImagePath: json['originalImagePath'] as String? ?? '',
       thumbnailImagePath: json['thumbnailImagePath'] as String? ?? '',
-      imageSizeBytes: json['imageSizeBytes'] as int? ?? 0,
+      imageSizeBytes: _parseInt(json['imageSizeBytes']),
       senderId: json['senderId'] as String,
       receiverId: json['receiverId'] as String,
       pairId: json['pairId'] as String,
@@ -127,8 +127,16 @@ class IGRequestModel {
       updatedAt: _parseDate(json['updatedAt']),
       reviewedAt: _parseDate(json['reviewedAt']),
       accountType: json['accountType'] as String? ?? 'instagram',
-      rejectionCount: json['rejectionCount'] as int? ?? 0,
+      rejectionCount: _parseInt(json['rejectionCount']),
     );
+  }
+
+  static int _parseInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is double) return val.toInt();
+    if (val is String) return int.tryParse(val) ?? 0;
+    return 0;
   }
 
   static DateTime? _parseDate(dynamic date) {

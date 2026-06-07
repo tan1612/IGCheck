@@ -327,7 +327,7 @@ class FirestoreService extends ChangeNotifier {
       };
       if (imageUrl != null) updateData['originalImageUrl'] = imageUrl;
       if (thumbnailImageUrl != null) updateData['thumbnailImageUrl'] = thumbnailImageUrl;
-      if (imageSizeBytes != null) updateData['imageSizeBytes'] = imageSizeBytes.toString();
+      if (imageSizeBytes != null) updateData['imageSizeBytes'] = imageSizeBytes;
       if (accountType != null) updateData['accountType'] = accountType;
 
       await docRef.update(updateData);

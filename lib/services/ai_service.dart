@@ -4,8 +4,8 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
 
 class AIService {
-  // 1. Dán trực tiếp API Key Gemini của bạn vào đây (Không cần cấu hình Environment)
-  static const String _apiKey = 'AQ.Ab8RN6I0dCgnwYiMeRLW6wTQGjOwV2kgL-FDG69nSF51knXSDg';
+  // Đọc API Key bảo mật từ Environment Variables (Tránh bị lộ trên Git Public)
+  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
   
   static final AIService _instance = AIService._internal();
   factory AIService() => _instance;

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' hide RequestOptions;
 import 'package:image_picker/image_picker.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 class AIService {
   // 1. Nếu build trên máy tính: Thay chữ 'NHÉT_KEY_CỦA_NÍ_VÀO_ĐÂY' bằng API Key thật
   // 2. Nếu build trên Codemagic: Thêm Environment Variable tên là GEMINI_API_KEY
-  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: 'NHÉT_KEY_CỦA_NÍ_VÀO_ĐÂY');
+  static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: 'NHET_KEY_CUA_NI_VAO_DAY');
   
   static final AIService _instance = AIService._internal();
   factory AIService() => _instance;

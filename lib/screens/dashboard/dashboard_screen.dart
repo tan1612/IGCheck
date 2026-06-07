@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/ig_request_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
@@ -7,6 +8,7 @@ import '../../widgets/app_button.dart';
 import '../inbox/inbox_screen.dart';
 import '../sent/sent_screen.dart';
 import '../profile/profile_screen.dart';
+import 'filtered_requests_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -333,24 +335,28 @@ class _DashboardHomeState extends State<DashboardHome> {
                     count: pendingCount,
                     color: const Color(0xFFFFCC00),
                     icon: Icons.hourglass_empty,
+                    requestsList: filteredRequests.where((r) => r.status == 'pending' || r.status == 'updated').toList(),
                   ),
                   _buildStatCard(
                     title: 'Đã duyệt OK',
                     count: approvedCount,
                     color: const Color(0xFF34C759),
                     icon: Icons.check_circle_outline,
+                    requestsList: filteredRequests.where((r) => r.status == 'approved').toList(),
                   ),
                   _buildStatCard(
                     title: 'Cần sửa lại',
                     count: needsUpdateCount,
                     color: const Color(0xFFFF9500),
                     icon: Icons.edit_note,
+                    requestsList: filteredRequests.where((r) => r.status == 'needs_update').toList(),
                   ),
                   _buildStatCard(
                     title: 'Không OK',
                     count: waitingFeedbackCount,
                     color: const Color(0xFFFF3B30),
                     icon: Icons.cancel_outlined,
+                    requestsList: filteredRequests.where((r) => r.status == 'rejected').toList(),
                   ),
                 ],
               ),
@@ -367,8 +373,21 @@ class _DashboardHomeState extends State<DashboardHome> {
     required int count,
     required Color color,
     required IconData icon,
+    required List<IGRequestModel> requestsList,
   }) {
-    return Container(
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FilteredRequestsScreen(
+              title: 'Hồ sơ $title (${_selectedType == 'facebook' ? 'Facebook' : 'Instagram'})',
+              requests: requestsList,
+            ),
+          ),
+        );
+      },
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -422,6 +441,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           ),
         ],
       ),
+    ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -14,6 +15,7 @@ import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
 import '../../utils/validators.dart';
 import '../../utils/otp_helper.dart';
+import 'package:dio/dio.dart';
 
 class CreateIGRequestScreen extends StatefulWidget {
   const CreateIGRequestScreen({super.key});
@@ -50,8 +52,201 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     super.dispose();
   }
 
+  bool _isNotepadUrl(String val) {
+    final clean = val.trim().toLowerCase();
+    return clean.contains('note.2fa.live');
+  }
+
+  String? _parseNotepadAlias(String url) {
+    try {
+      final uri = Uri.parse(url.trim().startsWith('http') ? url.trim() : 'https://${url.trim()}');
+      final pathSegments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+      if (pathSegments.isEmpty) return null;
+      if (pathSegments.first == 'note' && pathSegments.length > 1) {
+        return pathSegments[1];
+      }
+      return pathSegments.first;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _importFromNotepad(String url) async {
+    final alias = _parseNotepadAlias(url);
+    if (alias == null || alias.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đường dẫn link Notepad không hợp lệ.')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.blue),
+            SizedBox(width: 20),
+            Expanded(child: Text('Đang tải tài khoản từ Notepad...')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final dio = Dio();
+      dio.options.connectTimeout = const Duration(seconds: 10);
+      final response = await dio.get('https://note.2fa.live/note/$alias');
+      
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
+
+      final data = response.data;
+      String? rawContent;
+      if (data is Map) {
+        rawContent = data['r']?.toString();
+      } else if (data is String) {
+        final decoded = json.decode(data);
+        rawContent = decoded['r']?.toString();
+      }
+
+      if (rawContent == null || rawContent.trim().isEmpty) {
+        throw Exception('Không có dữ liệu tài khoản trong Notepad.');
+      }
+
+      final lines = rawContent.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty && l.contains('|')).toList();
+      if (lines.isEmpty) {
+        throw Exception('Không tìm thấy tài khoản định dạng hợp lệ (dạng tài khoản|mật khẩu|2fa) trong Notepad.');
+      }
+
+      final accounts = lines.map((line) {
+        final parts = line.split('|');
+        return {
+          'username': parts[0].trim(),
+          'password': parts.length > 1 ? parts[1].trim() : '',
+          'twoFactorKey': parts.length > 2 ? parts[2].trim() : '',
+        };
+      }).toList();
+
+      if (accounts.length == 1) {
+        final acc = accounts.first;
+        setState(() {
+          _usernameController.text = acc['username']!;
+          _passwordController.text = acc['password']!;
+          _twoFactorKeyController.text = acc['twoFactorKey']!;
+          _quickImportController.clear();
+          _currentOtp = ''; // reset OTP
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã nhập thành công tài khoản: ${acc['username']}')),
+          );
+        }
+      } else {
+        if (mounted) {
+          _showAccountSelectionBottomSheet(accounts);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
+      
+      String errorMsg = e.toString().replaceAll('Exception: ', '');
+      bool isCorsError = errorMsg.contains('XMLHttpRequest') || errorMsg.contains('connection error');
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Lỗi kết nối / CORS'),
+              ],
+            ),
+            content: Text(isCorsError
+                ? 'Không thể tải trực tiếp trên Web do chính sách CORS của trình duyệt (Lỗi này sẽ KHÔNG xảy ra khi chạy app trên điện thoại iOS/Android).\n\nBạn hãy copy nội dung note và dán trực tiếp vào ô Nhập nhanh bên trên!'
+                : 'Không thể tải dữ liệu từ Notepad.\nChi tiết: $errorMsg'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  void _showAccountSelectionBottomSheet(List<Map<String, String>> accounts) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Chọn tài khoản muốn nhập',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: accounts.length,
+                  itemBuilder: (context, index) {
+                    final acc = accounts[index];
+                    return ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Color(0xFFE8F0FE),
+                        child: Icon(Icons.person, color: Colors.blue),
+                      ),
+                      title: Text(acc['username']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                        'Pass: ${acc['password']!.isNotEmpty ? "••••••" : "(trống)"} | 2FA: ${acc['twoFactorKey']!.isNotEmpty ? (acc['twoFactorKey']!.length > 8 ? "${acc['twoFactorKey']!.substring(0, 8)}..." : acc['twoFactorKey']!) : "(trống)"}',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _usernameController.text = acc['username']!;
+                          _passwordController.text = acc['password']!;
+                          _twoFactorKeyController.text = acc['twoFactorKey']!;
+                          _quickImportController.clear();
+                          _currentOtp = ''; // reset OTP
+                        });
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Đã nhập thành công tài khoản: ${acc['username']}')),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _parseQuickImport(String val) {
     final clean = val.trim();
+    if (_isNotepadUrl(clean)) {
+      _importFromNotepad(clean);
+      return;
+    }
     if (clean.contains('|')) {
       final parts = clean.split('|');
       if (parts.isNotEmpty) {

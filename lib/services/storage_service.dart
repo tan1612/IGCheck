@@ -24,8 +24,8 @@ class StorageService {
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
         final data = await file.readAsBytes();
-        final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 5));
-        return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 5));
+        final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 30));
+        return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 30));
       } catch (e) {
         debugPrint('Firebase Storage error: $e, falling back to Catbox.moe');
         return await _fallbackUpload(file);
@@ -44,8 +44,8 @@ class StorageService {
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
         final data = await file.readAsBytes();
-        final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 5));
-        return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 5));
+        final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 30));
+        return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 30));
       } catch (e) {
         debugPrint('Firebase Storage error: $e, falling back to Catbox.moe');
         return await _fallbackUpload(file);

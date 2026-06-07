@@ -1,13 +1,13 @@
 import 'dart:math';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/ig_request_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/download_service.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/status_chip.dart';
 import '../../utils/date_utils.dart';
@@ -214,32 +214,20 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     
     setState(() => _isSubmitting = true);
     try {
-      final dio = Dio();
-      final response = await dio.get(
+      await DownloadService().saveImageToGallery(
         imageUrl,
-        options: Options(
-          responseType: ResponseType.bytes,
-          headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'},
-        ),
+        onStatusChanged: (status) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(status),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.black87,
+              ),
+            );
+          }
+        },
       );
-      
-      final result = await ImageGallerySaver.saveImage(
-        Uint8List.fromList(response.data),
-        quality: 100,
-        name: "IGCheck_${DateTime.now().millisecondsSinceEpoch}",
-      );
-
-      if (mounted) {
-        if (result != null && result['isSuccess'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã tải ảnh gốc thành công và lưu vào thư viện ảnh.')),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Lỗi: Không thể lưu ảnh vào máy.')),
-          );
-        }
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -456,6 +444,40 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                       )
                                     ],
                                   ),
+                                  if (request.originalImageUrl.isNotEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/fullscreen_image',
+                                          arguments: {
+                                            'url': request.originalImageUrl,
+                                            'username': request.instagramUsername,
+                                          },
+                                        );
+                                      },
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                          imageUrl: request.thumbnailImageUrl.isNotEmpty ? request.thumbnailImageUrl : request.originalImageUrl,
+                                          height: 160,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(
+                                            height: 160,
+                                            color: Colors.grey.shade200,
+                                            child: const Center(child: CircularProgressIndicator()),
+                                          ),
+                                          errorWidget: (context, url, error) => Container(
+                                            height: 160,
+                                            color: Colors.grey.shade200,
+                                            child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 12),
                                   SizedBox(
                                     width: double.infinity,

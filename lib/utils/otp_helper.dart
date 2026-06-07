@@ -1,42 +1,32 @@
-import 'dart:convert';
-import 'package:dio/dio.dart';
+import 'package:otp/otp.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class OtpHelper {
-  /// Fetches a 6-digit Time-based One-Time Password (TOTP) from 2fa.live API
+  /// Generates a 6-digit Time-based One-Time Password (TOTP) locally
   static Future<String> fetchOtp(String secret) async {
-    final cleanSecret = secret.replaceAll(' ', '').trim();
+    // Standardize the secret key (remove spaces, make uppercase as standard Base32)
+    final cleanSecret = secret.replaceAll(' ', '').toUpperCase().trim();
     if (cleanSecret.isEmpty) {
       throw Exception('Khóa bảo mật 2FA trống');
     }
 
-    final dio = Dio();
-    dio.options.connectTimeout = const Duration(seconds: 10);
-    dio.options.receiveTimeout = const Duration(seconds: 10);
-
-    final response = await dio.get('https://2fa.live/tok/$cleanSecret');
-    
-    final data = response.data;
-    String? token;
-
-    if (data is Map) {
-      token = data['token']?.toString();
-    } else if (data is String) {
-      final decoded = json.decode(data);
-      if (decoded is Map) {
-        token = decoded['token']?.toString();
-      }
+    try {
+      // Generate TOTP code locally using RFC 6238 implementation
+      final code = OTP.generateTOTPCodeString(
+        cleanSecret,
+        DateTime.now().millisecondsSinceEpoch,
+        length: 6,
+        interval: 30,
+        algorithm: Algorithm.SHA1,
+      );
+      return code;
+    } catch (e) {
+      throw Exception('Không thể giải mã khóa 2FA. Vui lòng kiểm tra lại định dạng khóa.');
     }
-
-    if (token == null || token.trim().isEmpty) {
-      throw Exception('Không tìm thấy mã OTP trong phản hồi từ server.');
-    }
-
-    return token.trim();
   }
 
-  /// Helper to fetch and show the OTP in a beautiful dialog, auto-copying it to clipboard
+  /// Helper to generate and show the OTP in a beautiful dialog, auto-copying it to clipboard
   static Future<void> showOtpDialog(BuildContext context, String secret) async {
     final cleanSecret = secret.replaceAll(' ', '').trim();
     if (cleanSecret.isEmpty) {
@@ -46,7 +36,7 @@ class OtpHelper {
       return;
     }
 
-    // 1. Show loading dialog
+    // 1. Show loading dialog (shows briefly for UX transition)
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -55,13 +45,15 @@ class OtpHelper {
           children: [
             CircularProgressIndicator(color: Colors.blue),
             SizedBox(width: 20),
-            Expanded(child: Text('Đang lấy mã OTP 2FA...')),
+            Expanded(child: Text('Đang tạo mã OTP 2FA...')),
           ],
         ),
       ),
     );
 
     try {
+      // Brief delay to make the transition feel natural and show loading for a split second
+      await Future.delayed(const Duration(milliseconds: 250));
       final otp = await fetchOtp(cleanSecret);
       
       // Close loading dialog
@@ -158,11 +150,11 @@ class OtpHelper {
               children: [
                 Icon(Icons.error_outline, color: Colors.red),
                 SizedBox(width: 8),
-                Text('Lỗi lấy mã 2FA'),
+                Text('Lỗi giải mã 2FA'),
               ],
             ),
             content: Text(
-              'Không thể lấy mã OTP từ 2fa.live.\nChi tiết: ${e.toString().replaceAll('Exception: ', '')}\n\nVui lòng kiểm tra lại khóa 2FA hoặc kết nối mạng.',
+              'Không thể lấy mã OTP.\nChi tiết: ${e.toString().replaceAll('Exception: ', '')}\n\nVui lòng kiểm tra lại định dạng khóa 2FA.',
             ),
             actions: [
               TextButton(

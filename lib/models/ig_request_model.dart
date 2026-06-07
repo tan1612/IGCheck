@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class IGRequestModel {
   final String id;
   final String instagramUsername; // Acts as username for Instagram, UID/username for Facebook
@@ -117,17 +119,18 @@ class IGRequestModel {
       feedback: json['feedback'] as String? ?? '',
       lastUpdatedBy: json['lastUpdatedBy'] as String? ?? '',
       lastAction: json['lastAction'] as String? ?? 'created',
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String)
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.tryParse(json['updatedAt'] as String)
-          : null,
-      reviewedAt: json['reviewedAt'] != null
-          ? DateTime.tryParse(json['reviewedAt'] as String)
-          : null,
+      createdAt: _parseDate(json['createdAt']),
+      updatedAt: _parseDate(json['updatedAt']),
+      reviewedAt: _parseDate(json['reviewedAt']),
       accountType: json['accountType'] as String? ?? 'instagram',
     );
+  }
+
+  static DateTime? _parseDate(dynamic date) {
+    if (date == null) return null;
+    if (date is Timestamp) return date.toDate();
+    if (date is String) return DateTime.tryParse(date);
+    return null;
   }
 
   Map<String, dynamic> toJson() {

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class PairModel {
   final String id;
   final String memberA;
@@ -34,13 +36,16 @@ class PairModel {
       id: json['id'] as String,
       memberA: json['memberA'] as String,
       memberB: json['memberB'] as String,
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String)
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.tryParse(json['updatedAt'] as String)
-          : null,
+      createdAt: _parseDate(json['createdAt']),
+      updatedAt: _parseDate(json['updatedAt']),
     );
+  }
+
+  static DateTime? _parseDate(dynamic date) {
+    if (date == null) return null;
+    if (date is Timestamp) return date.toDate();
+    if (date is String) return DateTime.tryParse(date);
+    return null;
   }
 
   Map<String, dynamic> toJson() {

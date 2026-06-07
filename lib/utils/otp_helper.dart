@@ -19,6 +19,7 @@ class OtpHelper {
         length: 6,
         interval: 30,
         algorithm: Algorithm.SHA1,
+        isGoogle: true, // Crucial: standard 2FA secrets are Base32 encoded (Google Authenticator style)
       );
       return code;
     } catch (e) {

@@ -71,7 +71,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     }
   }
 
-  Future<void> _importFromNotepad(String url) async {
+  Future<void> _importFromNotepad(String url, {bool filterDuplicates = false}) async {
     final alias = _parseNotepadAlias(url);
     if (alias == null || alias.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -95,6 +95,10 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     );
 
     try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+      final user = authService.currentUser;
+
       final dio = Dio();
       dio.options.connectTimeout = const Duration(seconds: 10);
       final response = await dio.get('https://note.2fa.live/note/$alias');
@@ -121,7 +125,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         throw Exception('Không tìm thấy tài khoản định dạng hợp lệ (dạng tài khoản|mật khẩu|2fa) trong Notepad.');
       }
 
-      final accounts = lines.map((line) {
+      var accounts = lines.map((line) {
         final parts = line.split('|');
         return {
           'username': parts[0].trim(),
@@ -129,6 +133,24 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
           'twoFactorKey': parts.length > 2 ? parts[2].trim() : '',
         };
       }).toList();
+
+      if (filterDuplicates && user != null && user.pairId != null) {
+        final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
+        final existingUsernames = existingRequests.map((r) {
+          final username = r.instagramUsername;
+          return username.startsWith('@') ? username.substring(1).toLowerCase() : username.toLowerCase();
+        }).toSet();
+
+        accounts = accounts.where((acc) {
+          final username = acc['username']!;
+          final normalized = username.startsWith('@') ? username.substring(1).toLowerCase() : username.toLowerCase();
+          return !existingUsernames.contains(normalized);
+        }).toList();
+
+        if (accounts.isEmpty) {
+          throw Exception('Tất cả tài khoản trong Notepad đã được gửi kiểm tra trước đó rồi!');
+        }
+      }
 
       if (accounts.length == 1) {
         final acc = accounts.first;
@@ -244,7 +266,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
   void _parseQuickImport(String val) {
     final clean = val.trim();
     if (_isNotepadUrl(clean)) {
-      _importFromNotepad(clean);
+      _importFromNotepad(clean, filterDuplicates: true);
       return;
     }
     if (clean.contains('|')) {
@@ -638,6 +660,36 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                       : 'Ví dụ: 100084729103841|cloneig@0605|CY72Q...',
                   prefixIcon: Icons.bolt_outlined,
                   onChanged: _parseQuickImport,
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: Icon(
+                      _accountType == 'instagram' ? Icons.alternate_email : Icons.facebook_outlined,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _accountType == 'instagram' 
+                          ? 'Nhập danh sách từ note.2fa.live/instagram' 
+                          : 'Nhập danh sách từ note.2fa.live/facebook',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.primaryColor,
+                      side: BorderSide(color: theme.primaryColor),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      final url = _accountType == 'instagram' 
+                          ? 'https://note.2fa.live/instagram' 
+                          : 'https://note.2fa.live/facebook';
+                      _importFromNotepad(url, filterDuplicates: true);
+                    },
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Divider(),

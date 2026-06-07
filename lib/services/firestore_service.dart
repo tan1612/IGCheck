@@ -138,6 +138,18 @@ class FirestoreService extends ChangeNotifier {
     }
   }
 
+  Future<List<IGRequestModel>> getRequestsByPairId(String pairId) async {
+    if (useFirebase) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('requests')
+          .where('pairId', isEqualTo: pairId)
+          .get();
+      return snapshot.docs.map((doc) => IGRequestModel.fromJson(doc.data())).toList();
+    } else {
+      return _requests.where((r) => r.pairId == pairId).toList();
+    }
+  }
+
   Future<void> createRequest({
     required String instagramUsername,
     required String displayName,

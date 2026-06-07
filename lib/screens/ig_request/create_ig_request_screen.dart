@@ -549,8 +549,11 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         ),
         title: const Text('Gửi hồ sơ mới'),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: SafeArea(
+          child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Form(
             key: _formKey,
@@ -927,6 +930,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

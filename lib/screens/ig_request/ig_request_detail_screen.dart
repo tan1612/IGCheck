@@ -355,8 +355,11 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
               )
             ],
           ),
-          body: SafeArea(
-            child: SingleChildScrollView(
+          body: GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            behavior: HitTestBehavior.opaque,
+            child: SafeArea(
+              child: SingleChildScrollView(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -761,7 +764,8 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
               ),
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }

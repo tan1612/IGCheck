@@ -176,263 +176,267 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Trang cá nhân'),
         elevation: 0,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              // Avatar edit section
-              Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 54,
-                      backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
-                      backgroundImage: user?.avatarUrl != null && user!.avatarUrl.isNotEmpty
-                          ? NetworkImage(user.avatarUrl)
-                          : null,
-                      child: user?.avatarUrl == null || user!.avatarUrl.isEmpty
-                          ? Icon(Icons.person, size: 54, color: theme.primaryColor)
-                          : null,
-                    ),
-                    if (_isSaving)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.black38,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Center(
-                            child: CircularProgressIndicator(color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: GestureDetector(
-                        onTap: _isSaving ? null : _changeAvatar,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: theme.primaryColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              // User Information Form / Display
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                // Avatar edit section
+                Center(
+                  child: Stack(
                     children: [
-                      const Text(
-                        'Thông tin cá nhân',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                      CircleAvatar(
+                        radius: 54,
+                        backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
+                        backgroundImage: user?.avatarUrl != null && user!.avatarUrl.isNotEmpty
+                            ? NetworkImage(user.avatarUrl)
+                            : null,
+                        child: user?.avatarUrl == null || user!.avatarUrl.isEmpty
+                            ? Icon(Icons.person, size: 54, color: theme.primaryColor)
+                            : null,
                       ),
-                      const Divider(height: 24),
-                      if (_isEditing) ...[
-                        AppTextField(
-                          controller: _nameController,
-                          labelText: 'Tên hiển thị',
-                          hintText: 'Nhập tên hiển thị mới',
-                          prefixIcon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 16),
-                        AppTextField(
-                          controller: _telegramController,
-                          labelText: 'Telegram Chat ID (để nhận thông báo)',
-                          hintText: 'Nhập ID (vd: 123456789)',
-                          prefixIcon: Icons.telegram,
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Mẹo: Lấy Chat ID bằng cách nhắn tin cho @getmyid_bot trên Telegram.',
-                          style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: AppButton(
-                                text: 'Huỷ',
-                                type: AppButtonType.outline,
-                                onPressed: () => setState(() => _isEditing = false),
-                              ),
+                      if (_isSaving)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black38,
+                              shape: BoxShape.circle,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: AppButton(
-                                text: 'Lưu',
-                                isLoading: _isSaving,
-                                onPressed: _saveProfileName,
-                              ),
+                            child: const Center(
+                              child: CircularProgressIndicator(color: Colors.white),
                             ),
-                          ],
+                          ),
                         ),
-                      ] else ...[
-                        _buildProfileField('Tên hiển thị', user?.name ?? ''),
-                        _buildProfileField('Email', user?.email ?? ''),
-                        _buildProfileField('Telegram Chat ID', user?.telegramChatId?.isNotEmpty == true ? user!.telegramChatId! : 'Chưa thiết lập'),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () => setState(() => _isEditing = true),
-                              icon: const Icon(Icons.edit, size: 16),
-                              label: const Text('Chỉnh sửa'),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: _isSaving ? null : _changeAvatar,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: theme.primaryColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
                             ),
-                          ],
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              // Partner Info Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFCE4EC), // Pink background
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.favorite,
-                              color: Colors.pink,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Đối tác ghép đôi',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1C1C1E),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  partner != null ? partner.name : 'Chưa ghép đôi',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF8E8E93),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (partner != null)
-                            Chip(
-                              backgroundColor: const Color(0xFFE8F8F5),
-                              side: BorderSide.none,
-                              label: Text(
-                                partner.email,
-                                style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (partner != null) ...[
-                        const Divider(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () => _unpair(authService),
-                              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                              icon: const Icon(Icons.favorite_border, size: 16),
-                              label: const Text('Huỷ ghép đôi'),
-                            ),
-                          ],
-                        ),
-                      ] else ...[
-                        const Divider(height: 24),
+                const SizedBox(height: 24),
+                // User Information Form / Display
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         const Text(
-                          'Nhập email của người thương để ghép đôi tài khoản:',
-                          style: TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                          'Thông tin cá nhân',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
                         ),
-                        const SizedBox(height: 12),
-                        Form(
-                          key: _pairingFormKey,
-                          child: Column(
+                        const Divider(height: 24),
+                        if (_isEditing) ...[
+                          AppTextField(
+                            controller: _nameController,
+                            labelText: 'Tên hiển thị',
+                            hintText: 'Nhập tên hiển thị mới',
+                            prefixIcon: Icons.person_outline,
+                          ),
+                          const SizedBox(height: 16),
+                          AppTextField(
+                            controller: _telegramController,
+                            labelText: 'Telegram Chat ID (để nhận thông báo)',
+                            hintText: 'Nhập ID (vd: 123456789)',
+                            prefixIcon: Icons.telegram,
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Mẹo: Lấy Chat ID bằng cách nhắn tin cho @getmyid_bot trên Telegram.',
+                            style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
                             children: [
-                              AppTextField(
-                                controller: _partnerEmailController,
-                                labelText: 'Email người kia',
-                                hintText: 'Ví dụ: partner@igcheck.com',
-                                prefixIcon: Icons.email_outlined,
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Vui lòng nhập email của người kia';
-                                  }
-                                  if (val.trim().toLowerCase() == user?.email.toLowerCase()) {
-                                    return 'Không thể kết nối với chính mình';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              if (_pairingError.isNotEmpty) ...[
-                                Text(
-                                  _pairingError,
-                                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                              Expanded(
+                                child: AppButton(
+                                  text: 'Huỷ',
+                                  type: AppButtonType.outline,
+                                  onPressed: () => setState(() => _isEditing = false),
                                 ),
-                                const SizedBox(height: 12),
-                              ],
-                              AppButton(
-                                text: 'Kết nối ngay',
-                                isLoading: _isPairing,
-                                onPressed: () => _pair(authService),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: AppButton(
+                                  text: 'Lưu',
+                                  isLoading: _isSaving,
+                                  onPressed: _saveProfileName,
+                                ),
                               ),
                             ],
                           ),
-                        ),
+                        ] else ...[
+                          _buildProfileField('Tên hiển thị', user?.name ?? ''),
+                          _buildProfileField('Email', user?.email ?? ''),
+                          _buildProfileField('Telegram Chat ID', user?.telegramChatId?.isNotEmpty == true ? user!.telegramChatId! : 'Chưa thiết lập'),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => setState(() => _isEditing = true),
+                                icon: const Icon(Icons.edit, size: 16),
+                                label: const Text('Chỉnh sửa'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              // Logout button
-              AppButton(
-                text: 'Đăng xuất',
-                type: AppButtonType.danger,
-                icon: Icons.logout,
-                onPressed: () async {
-                  final navigator = Navigator.of(context);
-                  await authService.signOut();
-                  navigator.pushNamedAndRemoveUntil('/login', (route) => false);
-                },
-              ),
-              const SizedBox(height: 30),
-            ],
+                const SizedBox(height: 16),
+                // Partner Info Card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFCE4EC), // Pink background
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.favorite,
+                                color: Colors.pink,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Đối tác ghép đôi',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1C1C1E),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    partner != null ? partner.name : 'Chưa ghép đôi',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF8E8E93),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (partner != null)
+                              Chip(
+                                backgroundColor: const Color(0xFFE8F8F5),
+                                side: BorderSide.none,
+                                label: Text(
+                                  partner.email,
+                                  style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (partner != null) ...[
+                          const Divider(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _unpair(authService),
+                                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                                icon: const Icon(Icons.favorite_border, size: 16),
+                                label: const Text('Huỷ ghép đôi'),
+                              ),
+                            ],
+                          ),
+                        ] else ...[
+                          const Divider(height: 24),
+                          const Text(
+                            'Nhập email của người thương để ghép đôi tài khoản:',
+                            style: TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                          ),
+                          const SizedBox(height: 12),
+                          Form(
+                            key: _pairingFormKey,
+                            child: Column(
+                              children: [
+                                AppTextField(
+                                  controller: _partnerEmailController,
+                                  labelText: 'Email người kia',
+                                  hintText: 'Ví dụ: partner@igcheck.com',
+                                  prefixIcon: Icons.email_outlined,
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return 'Vui lòng nhập email của người kia';
+                                    }
+                                    if (val.trim().toLowerCase() == user?.email.toLowerCase()) {
+                                      return 'Không thể kết nối với chính mình';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                if (_pairingError.isNotEmpty) ...[
+                                  Text(
+                                    _pairingError,
+                                    style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+                                AppButton(
+                                  text: 'Kết nối ngay',
+                                  isLoading: _isPairing,
+                                  onPressed: () => _pair(authService),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Logout button
+                AppButton(
+                  text: 'Đăng xuất',
+                  type: AppButtonType.danger,
+                  icon: Icons.logout,
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    await authService.signOut();
+                    navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+                  },
+                ),
+                const SizedBox(height: 30),
+              ],
+            ),
           ),
         ),
       ),

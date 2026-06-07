@@ -176,6 +176,80 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteAccount() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final uid = _currentUser?.uid;
+      if (uid == null) return;
+
+      final backupUser = _currentUser!;
+      final currentPartnerId = backupUser.partnerId;
+
+      // 1. Unpair first (so partner's data is updated while authenticated)
+      await unpair();
+
+      if (useFirebase) {
+        // 2. Delete user's requests from Firestore
+        final requestsQuery = await FirebaseFirestore.instance
+            .collection('requests')
+            .where('senderId', isEqualTo: uid)
+            .get();
+        for (var doc in requestsQuery.docs) {
+          await doc.reference.delete();
+        }
+
+        final receivedQuery = await FirebaseFirestore.instance
+            .collection('requests')
+            .where('receiverId', isEqualTo: uid)
+            .get();
+        for (var doc in receivedQuery.docs) {
+          await doc.reference.delete();
+        }
+
+        // 3. Delete user document from Firestore
+        await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+
+        // 4. Delete Firebase Auth user
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          try {
+            await user.delete();
+          } catch (authError) {
+            // Restore Firestore user document if Auth deletion fails (e.g. requires-recent-login)
+            await FirebaseFirestore.instance.collection('users').doc(uid).set(backupUser.toJson());
+
+            // Restore pairing for partner if they were paired
+            if (currentPartnerId != null && currentPartnerId.isNotEmpty) {
+              final pairId = backupUser.pairId;
+              await FirebaseFirestore.instance.collection('users').doc(currentPartnerId).update({
+                'partnerId': uid,
+                'pairId': pairId,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+            }
+
+            // Re-fetch user data to restore local state
+            await _fetchUserData(uid);
+            rethrow;
+          }
+        }
+      } else {
+        // For Mock mode
+        _mockUsers.removeWhere((u) => u.uid == uid);
+      }
+
+      _userSubscription?.cancel();
+      _userSubscription = null;
+      _currentUser = null;
+      _partnerUser = null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
   void updateProfile(String name, String avatarUrl, {String? telegramChatId}) {
     if (_currentUser == null) return;
     final updated = _currentUser!.copyWith(

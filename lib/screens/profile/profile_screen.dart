@@ -434,6 +434,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     navigator.pushNamedAndRemoveUntil('/login', (route) => false);
                   },
                 ),
+                const SizedBox(height: 16),
+                // Delete Account button
+                TextButton(
+                  onPressed: () => _confirmDeleteAccount(authService),
+                  child: const Text(
+                    'Xóa tài khoản',
+                    style: TextStyle(
+                      color: Color(0xFFFF3B30),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 30),
               ],
             ),
@@ -441,6 +455,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  void _confirmDeleteAccount(AuthService authService) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Xóa tài khoản?'),
+          content: const Text(
+            'Bạn có chắc chắn muốn xóa tài khoản? Toàn bộ dữ liệu hồ sơ và ghép đôi của bạn sẽ bị xóa vĩnh viễn và không thể khôi phục.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext); // Close confirmation dialog
+                _performDeleteAccount(authService);
+              },
+              child: const Text('Xóa', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _performDeleteAccount(AuthService authService) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext loadingContext) {
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
+
+    try {
+      await authService.deleteAccount();
+      
+      if (!mounted) return;
+      navigator.pop(); // Close loading indicator
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Đã xóa tài khoản thành công.')),
+      );
+      navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
+      navigator.pop(); // Close loading indicator
+      
+      String errorMessage = e.toString();
+      if (errorMessage.contains('requires-recent-login')) {
+        errorMessage = 'Hành động này yêu cầu đăng nhập gần đây. Vui lòng đăng xuất, đăng nhập lại và thực hiện lại xóa tài khoản.';
+      } else {
+        errorMessage = 'Lỗi khi xóa tài khoản: $e';
+      }
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (BuildContext errorContext) {
+            return AlertDialog(
+              title: const Text('Không thể xóa tài khoản'),
+              content: Text(errorMessage),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(errorContext),
+                  child: const Text('Đóng'),
+                ),
+              ],
+            );
+          },
+        );
+      }
+    }
   }
 
   Widget _buildProfileField(String label, String value) {

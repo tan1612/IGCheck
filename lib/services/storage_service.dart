@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:dio/dio.dart';
 
 class StorageService {
   bool get useFirebase => Firebase.apps.isNotEmpty;
@@ -26,8 +27,8 @@ class StorageService {
         final uploadTask = await ref.putData(data);
         return await uploadTask.ref.getDownloadURL();
       } catch (e) {
-        debugPrint('Error uploading to Firebase Storage: $e');
-        throw Exception('Không thể tải ảnh lên máy chủ. Bạn đã bật Firebase Storage chưa? Lỗi chi tiết: $e');
+        debugPrint('Firebase Storage error: $e, falling back to Catbox.moe');
+        return await _fallbackUpload(file);
       }
     } else {
       await Future.delayed(const Duration(seconds: 1));
@@ -46,8 +47,8 @@ class StorageService {
         final uploadTask = await ref.putData(data);
         return await uploadTask.ref.getDownloadURL();
       } catch (e) {
-        debugPrint('Error uploading thumbnail: $e');
-        throw Exception('Không thể tải ảnh thu nhỏ lên máy chủ. Lỗi chi tiết: $e');
+        debugPrint('Firebase Storage error: $e, falling back to Catbox.moe');
+        return await _fallbackUpload(file);
       }
     } else {
       await Future.delayed(const Duration(milliseconds: 500));
@@ -95,5 +96,26 @@ class StorageService {
       'originalImagePath': origPath,
       'thumbnailImagePath': thumbPath,
     };
+  }
+
+  Future<String> _fallbackUpload(XFile file) async {
+    try {
+      final dio = Dio();
+      final formData = FormData.fromMap({
+        'reqtype': 'fileupload',
+        'fileToUpload': MultipartFile.fromBytes(
+          await file.readAsBytes(),
+          filename: file.name.isNotEmpty ? file.name : 'image.jpg',
+        ),
+      });
+      final response = await dio.post('https://catbox.moe/user/api.php', data: formData);
+      if (response.statusCode == 200) {
+        return response.data.toString();
+      }
+    } catch (e) {
+      debugPrint('Catbox upload error: $e');
+      throw Exception('Không thể upload ảnh (Kể cả máy chủ dự phòng cũng lỗi). Vui lòng kiểm tra lại mạng hoặc nâng cấp gói Firebase Storage.');
+    }
+    return '';
   }
 }

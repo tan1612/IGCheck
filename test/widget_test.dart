@@ -8,5 +8,8 @@ void main() {
 
     // Verify that Splash screen title or logo is rendered
     expect(find.text('IGCheck'), findsOneWidget);
+
+    // Pump frames to let the splash screen transition timer complete
+    await tester.pumpAndSettle(const Duration(seconds: 3));
   });
 }

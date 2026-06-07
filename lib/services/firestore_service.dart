@@ -360,16 +360,6 @@ class FirestoreService extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteRequest(String requestId) async {
-    if (useFirebase) {
-      await FirebaseFirestore.instance.collection('requests').doc(requestId).delete();
-    } else {
-      _requests.removeWhere((r) => r.id == requestId);
-      _notifySubscriptions();
-      notifyListeners();
-    }
-  }
-
   Future<void> sendFeedback({
     required String requestId,
     required String feedback,

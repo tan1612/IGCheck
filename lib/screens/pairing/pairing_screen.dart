@@ -36,7 +36,7 @@ class _PairingScreenState extends State<PairingScreen> {
       // Simulate connecting process
       await Future.delayed(const Duration(milliseconds: 1500));
       
-      authService.mockPairWith(_emailController.text);
+      await authService.mockPairWith(_emailController.text);
       
       if (mounted) {
         // Show success sheet/dialog

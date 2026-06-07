@@ -15,6 +15,7 @@ class AuthService extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   bool get useFirebase => Firebase.apps.isNotEmpty;
+  bool get isUserSignedIn => useFirebase ? FirebaseAuth.instance.currentUser != null : _currentUser != null;
 
   // Preset mock accounts
   static final List<UserModel> _mockUsers = [

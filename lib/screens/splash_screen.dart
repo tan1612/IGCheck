@@ -31,8 +31,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     final authService = Provider.of<AuthService>(context, listen: false);
     
-    if (authService.currentUser != null) {
-      if (authService.currentUser!.partnerId == null) {
+    if (authService.isUserSignedIn) {
+      // Wait for user data to load
+      int timeout = 0;
+      while (authService.currentUser == null && timeout < 50) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        timeout++;
+      }
+      
+      if (authService.currentUser == null) {
+        Navigator.pushReplacementNamed(context, '/login');
+      } else if (authService.currentUser!.partnerId == null || authService.currentUser!.partnerId!.isEmpty) {
         Navigator.pushReplacementNamed(context, '/pairing');
       } else {
         Navigator.pushReplacementNamed(context, '/dashboard');

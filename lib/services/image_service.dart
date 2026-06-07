@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ImageService {
@@ -14,7 +15,7 @@ class ImageService {
       );
       return pickedFile;
     } catch (e) {
-      print('Lỗi chọn ảnh: $e');
+      debugPrint('Lỗi chọn ảnh: $e');
       return null;
     }
   }

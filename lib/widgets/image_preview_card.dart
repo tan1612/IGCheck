@@ -153,7 +153,7 @@ class ImagePreviewCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFFE8F4FD),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFD4EDDA).withOpacity(0.0)),
+            border: Border.all(color: const Color(0xFFD4EDDA).withValues(alpha: 0.0)),
           ),
           child: const Row(
             children: [

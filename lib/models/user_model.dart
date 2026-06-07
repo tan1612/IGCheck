@@ -53,6 +53,22 @@ class UserModel {
     );
   }
 
+  UserModel clearPairing() {
+    return UserModel(
+      uid: uid,
+      name: name,
+      email: email,
+      avatarUrl: avatarUrl,
+      partnerId: null,
+      pairId: null,
+      fcmToken: fcmToken,
+      telegramChatId: telegramChatId,
+      lastSeenAt: lastSeenAt,
+      createdAt: createdAt,
+      updatedAt: DateTime.now(),
+    );
+  }
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       uid: json['uid'] as String,

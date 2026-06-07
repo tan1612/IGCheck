@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -338,7 +337,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                               boxShadow: _accountType == 'instagram'
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.08),
+                                        color: Colors.black.withValues(alpha: 0.08),
                                         blurRadius: 4,
                                         offset: const Offset(0, 2),
                                       )
@@ -377,7 +376,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                               boxShadow: _accountType == 'facebook'
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.08),
+                                        color: Colors.black.withValues(alpha: 0.08),
                                         blurRadius: 4,
                                         offset: const Offset(0, 2),
                                       )
@@ -471,8 +470,8 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.05),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        color: Colors.blue.withValues(alpha: 0.05),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(

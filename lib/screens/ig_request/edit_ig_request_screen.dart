@@ -326,8 +326,8 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       decoration: BoxDecoration(
-                        color: request.status == 'rejected' ? Colors.red.withOpacity(0.05) : Colors.blue.withOpacity(0.05),
-                        border: Border.all(color: request.status == 'rejected' ? Colors.red.withOpacity(0.3) : Colors.blue.withOpacity(0.3)),
+                        color: request.status == 'rejected' ? Colors.red.withValues(alpha: 0.05) : Colors.blue.withValues(alpha: 0.05),
+                        border: Border.all(color: request.status == 'rejected' ? Colors.red.withValues(alpha: 0.3) : Colors.blue.withValues(alpha: 0.3)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(

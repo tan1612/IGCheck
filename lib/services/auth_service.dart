@@ -258,6 +258,49 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<void> unpair() async {
+    if (_currentUser == null) return;
+    
+    final currentPartnerId = _currentUser!.partnerId;
+
+    if (useFirebase) {
+      if (currentPartnerId != null && currentPartnerId.isNotEmpty) {
+        try {
+          await FirebaseFirestore.instance.collection('users').doc(currentPartnerId).update({
+            'partnerId': null,
+            'pairId': null,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          debugPrint('Error clearing partner fields on Firebase: $e');
+        }
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).update({
+        'partnerId': null,
+        'pairId': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await _fetchUserData(_currentUser!.uid);
+    } else {
+      if (currentPartnerId != null && currentPartnerId.isNotEmpty) {
+        final partnerIdx = _mockUsers.indexWhere((u) => u.uid == currentPartnerId);
+        if (partnerIdx != -1) {
+          _mockUsers[partnerIdx] = _mockUsers[partnerIdx].clearPairing();
+        }
+      }
+
+      final userIdx = _mockUsers.indexWhere((u) => u.uid == _currentUser!.uid);
+      if (userIdx != -1) {
+        _currentUser = _currentUser!.clearPairing();
+        _mockUsers[userIdx] = _currentUser!;
+      }
+      _partnerUser = null;
+      notifyListeners();
+    }
+  }
+
   // Get user profile by ID
   UserModel? getUserById(String uid) {
     if (!useFirebase) {

@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -277,7 +276,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
         _isScanning = false;
         if (resultName == null) {
           final names = ['NGUYỄN VĂN TẤN', 'ĐỖ THỊ VY', 'TRẦN VĂN A', 'LÊ THỊ B'];
-          _aiExtractedName = names[Random().nextInt(names.length)] + ' (MOCK)';
+          _aiExtractedName = '${names[Random().nextInt(names.length)]} (MOCK)';
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Chưa cấu hình API Key. Dùng dữ liệu giả lập.')),
           );

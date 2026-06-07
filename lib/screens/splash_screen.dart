@@ -39,14 +39,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         timeout++;
       }
       
+      if (!mounted) return;
       if (authService.currentUser == null) {
         Navigator.pushReplacementNamed(context, '/login');
-      } else if (authService.currentUser!.partnerId == null || authService.currentUser!.partnerId!.isEmpty) {
-        Navigator.pushReplacementNamed(context, '/pairing');
       } else {
         Navigator.pushReplacementNamed(context, '/dashboard');
       }
     } else {
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/login');
     }
   }
@@ -66,8 +66,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              theme.primaryColor.withOpacity(0.1),
-              theme.colorScheme.secondary.withOpacity(0.1),
+              theme.primaryColor.withValues(alpha: 0.1),
+              theme.colorScheme.secondary.withValues(alpha: 0.1),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -89,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: theme.primaryColor.withOpacity(0.2),
+                        color: theme.primaryColor.withValues(alpha: 0.2),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),

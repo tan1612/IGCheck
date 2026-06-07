@@ -48,7 +48,7 @@ class DownloadService {
         return false;
       }
     } catch (e) {
-      print('Lỗi tải/lưu ảnh: $e');
+      debugPrint('Lỗi tải/lưu ảnh: $e');
       onStatusChanged('Không thể lưu ảnh, vui lòng thử lại.');
       return false;
     }
@@ -57,7 +57,11 @@ class DownloadService {
   Future<void> shareImageUrl(String url, String username) async {
     try {
       if (kIsWeb) {
-        await Share.share('Xem hồ sơ IG của $username tại đây: $url');
+        await SharePlus.instance.share(
+          ShareParams(
+            text: 'Xem hồ sơ IG của $username tại đây: $url',
+          ),
+        );
       } else {
         // Download temp file first to share the actual file
         final tempDir = await getTemporaryDirectory();
@@ -65,13 +69,15 @@ class DownloadService {
         
         await _dio.download(url, path);
         
-        await Share.shareXFiles(
-          [XFile(path)],
-          text: 'IGCheck: Hồ sơ Instagram $username',
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(path)],
+            text: 'IGCheck: Hồ sơ Instagram $username',
+          ),
         );
       }
     } catch (e) {
-      print('Lỗi chia sẻ: $e');
+      debugPrint('Lỗi chia sẻ: $e');
     }
   }
 }

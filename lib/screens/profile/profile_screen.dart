@@ -17,26 +17,31 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
   final _telegramController = TextEditingController();
+  final _partnerEmailController = TextEditingController();
+  final _pairingFormKey = GlobalKey<FormState>();
   final _imageService = ImageService();
   final StorageService _storageService = StorageService();
 
   bool _isEditing = false;
   bool _isSaving = false;
+  bool _isPairing = false;
+  String _pairingError = '';
 
   @override
   void dispose() {
     _nameController.dispose();
     _telegramController.dispose();
+    _partnerEmailController.dispose();
     super.dispose();
   }
 
   Future<void> _changeAvatar() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser!;
     final file = await _imageService.pickImage(ImageSource.gallery);
     if (file == null) return;
 
     setState(() => _isSaving = true);
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final user = authService.currentUser!;
 
     try {
       // Upload mock avatar to Storage
@@ -85,6 +90,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _pair(AuthService authService) async {
+    if (!_pairingFormKey.currentState!.validate()) return;
+    setState(() {
+      _pairingError = '';
+      _isPairing = true;
+    });
+
+    try {
+      await authService.mockPairWith(_partnerEmailController.text.trim());
+      _partnerEmailController.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kết nối thành công!')),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _pairingError = e.toString().replaceAll('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPairing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _unpair(AuthService authService) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Huỷ ghép đôi?'),
+        content: const Text('Bạn có chắc chắn muốn huỷ ghép đôi với tài khoản này không? Mọi hồ sơ chung sẽ không hiển thị nữa cho đến khi kết nối lại.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Huỷ'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Xác nhận'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await authService.unpair();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã huỷ ghép đôi thành công')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -114,7 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     CircleAvatar(
                       radius: 54,
-                      backgroundColor: theme.primaryColor.withOpacity(0.1),
+                      backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
                       backgroundImage: user?.avatarUrl != null && user!.avatarUrl.isNotEmpty
                           ? NetworkImage(user.avatarUrl)
                           : null,
@@ -233,53 +307,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFCE4EC), // Pink background
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.favorite,
-                          color: Colors.pink,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Đối tác ghép đôi',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1C1C1E),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFCE4EC), // Pink background
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.favorite,
+                              color: Colors.pink,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Đối tác ghép đôi',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1C1C1E),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  partner != null ? partner.name : 'Chưa ghép đôi',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF8E8E93),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (partner != null)
+                            Chip(
+                              backgroundColor: const Color(0xFFE8F8F5),
+                              side: BorderSide.none,
+                              label: Text(
+                                partner.email,
+                                style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w500),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              partner != null ? partner.name : 'Chưa ghép đôi',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF8E8E93),
-                              ),
+                        ],
+                      ),
+                      if (partner != null) ...[
+                        const Divider(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => _unpair(authService),
+                              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                              icon: const Icon(Icons.favorite_border, size: 16),
+                              label: const Text('Huỷ ghép đôi'),
                             ),
                           ],
                         ),
-                      ),
-                      if (partner != null)
-                        Chip(
-                          backgroundColor: const Color(0xFFE8F8F5),
-                          side: BorderSide.none,
-                          label: Text(
-                            partner.email,
-                            style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w500),
+                      ] else ...[
+                        const Divider(height: 24),
+                        const Text(
+                          'Nhập email của người thương để ghép đôi tài khoản:',
+                          style: TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                        ),
+                        const SizedBox(height: 12),
+                        Form(
+                          key: _pairingFormKey,
+                          child: Column(
+                            children: [
+                              AppTextField(
+                                controller: _partnerEmailController,
+                                labelText: 'Email người kia',
+                                hintText: 'Ví dụ: partner@igcheck.com',
+                                prefixIcon: Icons.email_outlined,
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Vui lòng nhập email của người kia';
+                                  }
+                                  if (val.trim().toLowerCase() == user?.email.toLowerCase()) {
+                                    return 'Không thể kết nối với chính mình';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              if (_pairingError.isNotEmpty) ...[
+                                Text(
+                                  _pairingError,
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              AppButton(
+                                text: 'Kết nối ngay',
+                                isLoading: _isPairing,
+                                onPressed: () => _pair(authService),
+                              ),
+                            ],
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -291,10 +426,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 type: AppButtonType.danger,
                 icon: Icons.logout,
                 onPressed: () async {
+                  final navigator = Navigator.of(context);
                   await authService.signOut();
-                  if (mounted) {
-                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-                  }
+                  navigator.pushNamedAndRemoveUntil('/login', (route) => false);
                 },
               ),
               const SizedBox(height: 30),

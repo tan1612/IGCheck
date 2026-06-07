@@ -37,12 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (success && mounted) {
-        final user = authService.currentUser;
-        if (user?.partnerId == null) {
-          Navigator.pushReplacementNamed(context, '/pairing');
-        } else {
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        }
+        Navigator.pushReplacementNamed(context, '/dashboard');
       }
     } catch (e) {
       setState(() => _errorMessage = e.toString().replaceAll('Exception: ', ''));
@@ -81,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: theme.primaryColor.withOpacity(0.15),
+                            color: theme.primaryColor.withValues(alpha: 0.15),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),

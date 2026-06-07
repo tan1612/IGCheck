@@ -157,7 +157,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   gradient: LinearGradient(
                     colors: [
                       theme.primaryColor,
-                      theme.primaryColor.withOpacity(0.8),
+                      theme.primaryColor.withValues(alpha: 0.8),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -165,7 +165,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: theme.primaryColor.withOpacity(0.25),
+                      color: theme.primaryColor.withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -204,7 +204,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                                 ? 'Đang kết nối với: ${partner.name} ❤️'
                                 : 'Chưa ghép đôi',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.9),
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
@@ -247,7 +247,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                             boxShadow: _selectedType == 'instagram'
                                 ? [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.08),
+                                      color: Colors.black.withValues(alpha: 0.08),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     )
@@ -278,7 +278,7 @@ class _DashboardHomeState extends State<DashboardHome> {
                             boxShadow: _selectedType == 'facebook'
                                 ? [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.08),
+                                      color: Colors.black.withValues(alpha: 0.08),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     )
@@ -375,7 +375,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.015),
+            color: Colors.black.withValues(alpha: 0.015),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -387,7 +387,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           Container(
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 18),

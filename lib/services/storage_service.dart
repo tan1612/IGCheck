@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -24,8 +25,8 @@ class StorageService {
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
         final data = await file.readAsBytes();
-        final uploadTask = await ref.putData(data);
-        return await uploadTask.ref.getDownloadURL();
+        final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 5));
+        return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 5));
       } catch (e) {
         debugPrint('Firebase Storage error: $e, falling back to Catbox.moe');
         return await _fallbackUpload(file);
@@ -44,8 +45,8 @@ class StorageService {
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
         final data = await file.readAsBytes();
-        final uploadTask = await ref.putData(data);
-        return await uploadTask.ref.getDownloadURL();
+        final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 5));
+        return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 5));
       } catch (e) {
         debugPrint('Firebase Storage error: $e, falling back to Catbox.moe');
         return await _fallbackUpload(file);
@@ -100,7 +101,10 @@ class StorageService {
 
   Future<String> _fallbackUpload(XFile file) async {
     try {
-      final dio = Dio();
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+      ));
       final formData = FormData.fromMap({
         'reqtype': 'fileupload',
         'fileToUpload': MultipartFile.fromBytes(

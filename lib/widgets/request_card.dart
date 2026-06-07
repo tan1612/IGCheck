@@ -33,6 +33,36 @@ class RequestCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Thumbnail (if available)
+              if (request.thumbnailImageUrl.isNotEmpty || request.originalImageUrl.isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    request.thumbnailImageUrl.isNotEmpty ? request.thumbnailImageUrl : request.originalImageUrl,
+                    width: 60,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 60,
+                      height: 60,
+                      color: const Color(0xFFE5E5EA),
+                      child: const Icon(Icons.image_not_supported, color: Color(0xFF8E8E93)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ] else ...[
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E5EA),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.image, color: Color(0xFF8E8E93)),
+                ),
+                const SizedBox(width: 12),
+              ],
               // Request Information
               Expanded(
                 child: Column(

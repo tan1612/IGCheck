@@ -1,7 +1,10 @@
 import 'dart:math';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
 import '../../models/ig_request_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
@@ -149,6 +152,48 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _downloadImage(String imageUrl) async {
+    if (imageUrl.isEmpty) return;
+    
+    setState(() => _isSubmitting = true);
+    try {
+      final dio = Dio();
+      final response = await dio.get(
+        imageUrl,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'},
+        ),
+      );
+      
+      final result = await ImageGallerySaver.saveImage(
+        Uint8List.fromList(response.data),
+        quality: 100,
+        name: "IGCheck_${DateTime.now().millisecondsSinceEpoch}",
+      );
+
+      if (mounted) {
+        if (result != null && result['isSuccess'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã tải ảnh gốc thành công và lưu vào thư viện ảnh.')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Lỗi: Không thể lưu ảnh vào máy.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi tải ảnh: $e')),
         );
       }
     } finally {
@@ -356,11 +401,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.download_rounded, color: Colors.blue, size: 20),
-                                    onPressed: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Đã tải ảnh gốc thành công.')),
-                                      );
-                                    },
+                                    onPressed: _isSubmitting ? null : () => _downloadImage(request.originalImageUrl),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
                                   )

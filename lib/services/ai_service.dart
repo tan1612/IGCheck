@@ -22,7 +22,7 @@ class AIService {
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-3.5-flash',
+        model: 'gemini-1.5-flash',
         apiKey: _apiKey,
       );
 
@@ -61,7 +61,7 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-3.5-flash',
+        model: 'gemini-1.5-flash',
         apiKey: _apiKey,
       );
 
@@ -69,7 +69,10 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
       final dio = Dio();
       final responseHttp = await dio.get(
         imageUrl,
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'},
+        ),
       );
       final bytes = responseHttp.data;
       

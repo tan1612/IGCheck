@@ -168,6 +168,35 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     }
   }
 
+  String _currentOtp = '';
+
+  Future<void> _generateOtpInline(String secret) async {
+    if (secret.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập khóa bảo mật 2FA trước.')),
+      );
+      return;
+    }
+    try {
+      final otp = await OtpHelper.fetchOtp(secret);
+      setState(() {
+        _currentOtp = otp;
+      });
+      await Clipboard.setData(ClipboardData(text: otp));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã lấy và sao chép mã OTP: $otp'), duration: const Duration(seconds: 2)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -486,7 +515,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                         },
                       ),
                       TextButton(
-                        onPressed: () => OtpHelper.showOtpDialog(context, _twoFactorKeyController.text),
+                        onPressed: () => _generateOtpInline(_twoFactorKeyController.text),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.only(right: 12),
                           minimumSize: Size.zero,
@@ -504,6 +533,32 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                     ],
                   ),
                 ),
+                if (_currentOtp.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  AppTextField(
+                    controller: TextEditingController(text: _currentOtp),
+                    labelText: 'Mã OTP 2FA hiện tại',
+                    prefixIcon: Icons.vpn_key_outlined,
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _currentOtp));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép mã OTP!'), duration: Duration(seconds: 1)),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, color: Colors.blue, size: 20),
+                          onPressed: () => _generateOtpInline(_twoFactorKeyController.text),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 AppTextField(
                   controller: _displayNameController,

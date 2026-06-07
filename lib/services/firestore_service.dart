@@ -22,56 +22,7 @@ class FirestoreService extends ChangeNotifier {
   }
 
   void _seedInitialRequests() {
-    final now = DateTime.now();
-    _requests.addAll([
-      IGRequestModel(
-        id: 'req_1',
-        instagramUsername: '@jane_doe',
-        displayName: 'Jane Doe',
-        note: 'Vy check giúp anh tài khoản này nha, nghi vấn clone.',
-        originalImageUrl: '',
-        thumbnailImageUrl: '',
-        originalImagePath: '',
-        thumbnailImagePath: '',
-        imageSizeBytes: 0,
-        senderId: 'uid_tan',
-        receiverId: 'uid_vy',
-        pairId: 'pair_tan_vy',
-        status: 'pending',
-        feedback: '',
-        password: 'password123',
-        twoFactorKey: 'CY72QV2PJOUWPPJSAZ5Z4DQCGX5PYN7G',
-        lastUpdatedBy: 'uid_tan',
-        lastAction: 'created',
-        createdAt: now.subtract(const Duration(hours: 3)),
-        updatedAt: now.subtract(const Duration(hours: 3)),
-        accountType: 'instagram',
-      ),
-      IGRequestModel(
-        id: 'req_2',
-        instagramUsername: '100084729103841',
-        displayName: 'Facebook Clone 1',
-        note: 'Tấn xem hộ em tài khoản FB này có lừa đảo không.',
-        originalImageUrl: '',
-        thumbnailImageUrl: '',
-        originalImagePath: '',
-        thumbnailImagePath: '',
-        imageSizeBytes: 0,
-        senderId: 'uid_vy',
-        receiverId: 'uid_tan',
-        pairId: 'pair_tan_vy',
-        status: 'needs_update',
-        feedback: 'Thông reverse 2FA bị sai rồi em ơi, xem lại nhé.',
-        password: 'cloneig@0605',
-        twoFactorKey: 'CY72QV2PJOUWPPJSAZ5Z4DQCGX5PYN7G',
-        lastUpdatedBy: 'uid_tan',
-        lastAction: 'needs_update',
-        createdAt: now.subtract(const Duration(days: 1)),
-        updatedAt: now.subtract(const Duration(hours: 5)),
-        reviewedAt: now.subtract(const Duration(hours: 5)),
-        accountType: 'facebook',
-      ),
-    ]);
+    // Empty initial requests for production release
   }
 
   // Get current list in memory

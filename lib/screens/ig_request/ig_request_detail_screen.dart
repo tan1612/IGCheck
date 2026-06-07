@@ -29,6 +29,29 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
   String? _aiExtractedName;
   bool _isScanning = false;
 
+  String _currentOtp = '';
+
+  Future<void> _generateOtpInline(String secret) async {
+    try {
+      final otp = await OtpHelper.fetchOtp(secret);
+      setState(() {
+        _currentOtp = otp;
+      });
+      await Clipboard.setData(ClipboardData(text: otp));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Đã lấy và sao chép mã OTP: $otp'), duration: const Duration(seconds: 2)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _feedbackController.dispose();
@@ -533,6 +556,15 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                             obscured: false,
                             isTwoFactor: true,
                           ),
+                          if (_currentOtp.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            _buildCredentialField(
+                              label: 'Mã OTP 2FA hiện tại',
+                              value: _currentOtp,
+                              obscured: false,
+                              onRefreshOtp: () => _generateOtpInline(request.twoFactorKey),
+                            ),
+                          ],
                         ],
                       ],
                     ),
@@ -741,6 +773,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     required bool obscured,
     VoidCallback? onToggleObscure,
     bool isTwoFactor = false,
+    VoidCallback? onRefreshOtp,
   }) {
     final displayValue = obscured ? '••••••••' : value;
     return Column(
@@ -801,10 +834,23 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                   );
                 },
               ),
+              if (onRefreshOtp != null) ...[
+                const SizedBox(width: 12),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    size: 20,
+                    color: Colors.blue,
+                  ),
+                  onPressed: onRefreshOtp,
+                ),
+              ],
               if (isTwoFactor) ...[
                 const SizedBox(width: 12),
                 TextButton(
-                  onPressed: () => OtpHelper.showOtpDialog(context, value),
+                  onPressed: () => _generateOtpInline(value),
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,

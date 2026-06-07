@@ -22,7 +22,7 @@ class AIService {
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
+        model: 'gemini-pro-vision',
         apiKey: _apiKey,
       );
 
@@ -63,7 +63,7 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
+        model: 'gemini-pro-vision',
         apiKey: _apiKey,
       );
 

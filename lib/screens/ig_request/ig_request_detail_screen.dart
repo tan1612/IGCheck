@@ -12,6 +12,7 @@ import '../../widgets/app_button.dart';
 import '../../widgets/status_chip.dart';
 import '../../utils/date_utils.dart';
 import '../../services/ai_service.dart';
+import '../../utils/otp_helper.dart';
 
 class IGRequestDetailScreen extends StatefulWidget {
   const IGRequestDetailScreen({super.key});
@@ -143,8 +144,13 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Đã gửi phản hồi thành công')),
         );
-        // Refresh details by fetching updated request from provider list
-        final updatedRequest = firestoreService.requests.firstWhere((r) => r.id == request.id);
+        // Refresh details by using local updated copy to avoid crash when provider list is empty in Firebase
+        final updatedRequest = request.copyWith(
+          feedback: feedbackText,
+          lastUpdatedBy: user.uid,
+          lastAction: 'feedback_added',
+          updatedAt: DateTime.now(),
+        );
         Navigator.pushReplacementNamed(context, '/ig_request_detail', arguments: updatedRequest);
       }
     } catch (e) {
@@ -525,6 +531,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                             label: 'Mã bảo mật 2FA',
                             value: request.twoFactorKey,
                             obscured: false,
+                            isTwoFactor: true,
                           ),
                         ],
                       ],
@@ -733,6 +740,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     required String value,
     required bool obscured,
     VoidCallback? onToggleObscure,
+    bool isTwoFactor = false,
   }) {
     final displayValue = obscured ? '••••••••' : value;
     return Column(
@@ -793,6 +801,25 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                   );
                 },
               ),
+              if (isTwoFactor) ...[
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: () => OtpHelper.showOtpDialog(context, value),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Lấy OTP',
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

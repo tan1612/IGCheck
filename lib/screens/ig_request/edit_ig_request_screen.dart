@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/ig_request_model.dart';
@@ -13,6 +14,7 @@ import '../../services/ai_service.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
 import '../../utils/validators.dart';
+import '../../utils/otp_helper.dart';
 
 class EditIGRequestScreen extends StatefulWidget {
   const EditIGRequestScreen({super.key});
@@ -283,6 +285,18 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
                       : 'UID Facebook (hoặc tên đăng nhập)',
                   hintText: isInstagram ? 'Ví dụ: @abcxyz' : 'Ví dụ: 100084729103841',
                   prefixIcon: isInstagram ? Icons.alternate_email : Icons.facebook_outlined,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                    onPressed: () {
+                      final val = _usernameController.text.trim();
+                      if (val.isNotEmpty) {
+                        Clipboard.setData(ClipboardData(text: val));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Đã sao chép tài khoản!'), duration: Duration(seconds: 1)),
+                        );
+                      }
+                    },
+                  ),
                   validator: isInstagram
                       ? Validators.validateUsername
                       : (val) => (val == null || val.trim().isEmpty) ? 'Vui lòng nhập UID Facebook' : null,
@@ -293,6 +307,18 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
                   labelText: 'Mật khẩu clone',
                   hintText: 'Nhập mật khẩu tài khoản',
                   prefixIcon: Icons.lock_outline,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                    onPressed: () {
+                      final val = _passwordController.text.trim();
+                      if (val.isNotEmpty) {
+                        Clipboard.setData(ClipboardData(text: val));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Đã sao chép mật khẩu!'), duration: Duration(seconds: 1)),
+                        );
+                      }
+                    },
+                  ),
                 ),
                 const SizedBox(height: 16),
                 AppTextField(
@@ -300,6 +326,39 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
                   labelText: 'Khóa bảo mật 2FA',
                   hintText: 'Ví dụ: CY72QV2PJOUWPPJSAZ5Z4DQCGX5PYN7G',
                   prefixIcon: Icons.security_outlined,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                        onPressed: () {
+                          final val = _twoFactorKeyController.text.trim();
+                          if (val.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: val));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép khóa 2FA!'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        },
+                      ),
+                      TextButton(
+                        onPressed: () => OtpHelper.showOtpDialog(context, _twoFactorKeyController.text),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.only(right: 12),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Lấy OTP',
+                          style: TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 AppTextField(

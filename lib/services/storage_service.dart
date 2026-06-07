@@ -27,7 +27,7 @@ class StorageService {
         return await uploadTask.ref.getDownloadURL();
       } catch (e) {
         debugPrint('Error uploading to Firebase Storage: $e');
-        return '';
+        throw Exception('Không thể tải ảnh lên máy chủ. Bạn đã bật Firebase Storage chưa? Lỗi chi tiết: $e');
       }
     } else {
       await Future.delayed(const Duration(seconds: 1));
@@ -43,11 +43,11 @@ class StorageService {
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
         final data = await file.readAsBytes();
-        final uploadTask = await ref.putData(data); // For simplicity, using original as thumbnail for now
+        final uploadTask = await ref.putData(data);
         return await uploadTask.ref.getDownloadURL();
       } catch (e) {
         debugPrint('Error uploading thumbnail: $e');
-        return '';
+        throw Exception('Không thể tải ảnh thu nhỏ lên máy chủ. Lỗi chi tiết: $e');
       }
     } else {
       await Future.delayed(const Duration(milliseconds: 500));

@@ -14,6 +14,8 @@ class FirestoreService extends ChangeNotifier {
   // Track active stream controllers to broadcast changes in mock mode
   final List<Map<String, dynamic>> _inboxSubscriptions = [];
   final List<Map<String, dynamic>> _sentSubscriptions = [];
+  final List<Map<String, dynamic>> _pairSubscriptions = [];
+  final List<Map<String, dynamic>> _requestByIdSubscriptions = [];
 
   FirestoreService() {
     if (!useFirebase) {
@@ -95,6 +97,78 @@ class FirestoreService extends ChangeNotifier {
     }
   }
 
+  Stream<List<IGRequestModel>> streamRequestsByPairId(String pairId) {
+    if (useFirebase) {
+      return FirebaseFirestore.instance
+          .collection('requests')
+          .where('pairId', isEqualTo: pairId)
+          .snapshots()
+          .map((snapshot) {
+            final list = snapshot.docs.map((doc) => IGRequestModel.fromJson(doc.data())).toList();
+            list.sort((a, b) => (b.updatedAt ?? DateTime.now()).compareTo(a.updatedAt ?? DateTime.now()));
+            return list;
+          });
+    } else {
+      final controller = StreamController<List<IGRequestModel>>.broadcast();
+      final sub = {'controller': controller, 'pairId': pairId};
+      _pairSubscriptions.add(sub);
+      
+      controller.onCancel = () {
+        _pairSubscriptions.remove(sub);
+        controller.close();
+      };
+      
+      scheduleMicrotask(() {
+        if (!controller.isClosed) {
+          final filtered = _requests.where((r) => r.pairId == pairId).toList();
+          filtered.sort((a, b) => (b.updatedAt ?? DateTime.now()).compareTo(a.updatedAt ?? DateTime.now()));
+          controller.add(filtered);
+        }
+      });
+      return controller.stream;
+    }
+  }
+
+  Stream<IGRequestModel?> streamRequestById(String requestId) {
+    if (useFirebase) {
+      return FirebaseFirestore.instance
+          .collection('requests')
+          .doc(requestId)
+          .snapshots()
+          .map((doc) => doc.exists && doc.data() != null ? IGRequestModel.fromJson(doc.data()!) : null);
+    } else {
+      final controller = StreamController<IGRequestModel?>.broadcast();
+      final sub = {'controller': controller, 'requestId': requestId};
+      _requestByIdSubscriptions.add(sub);
+      
+      controller.onCancel = () {
+        _requestByIdSubscriptions.remove(sub);
+        controller.close();
+      };
+      
+      scheduleMicrotask(() {
+        if (!controller.isClosed) {
+          final matches = _requests.where((r) => r.id == requestId).toList();
+          controller.add(matches.isNotEmpty ? matches.first : null);
+        }
+      });
+      return controller.stream;
+    }
+  }
+
+  Future<IGRequestModel?> getRequestById(String requestId) async {
+    if (useFirebase) {
+      final doc = await FirebaseFirestore.instance.collection('requests').doc(requestId).get();
+      if (doc.exists && doc.data() != null) {
+        return IGRequestModel.fromJson(doc.data()!);
+      }
+      return null;
+    } else {
+      final matches = _requests.where((r) => r.id == requestId).toList();
+      return matches.isNotEmpty ? matches.first : null;
+    }
+  }
+
   void _notifySubscriptions() {
     if (useFirebase) return; // Firestore handles its own realtime streams
     
@@ -119,6 +193,27 @@ class FirestoreService extends ChangeNotifier {
         final filtered = _requests.where((r) => r.senderId == userId && r.pairId == pairId).toList();
         filtered.sort((a, b) => (b.updatedAt ?? DateTime.now()).compareTo(a.updatedAt ?? DateTime.now()));
         controller.add(filtered);
+      }
+    }
+
+    for (final sub in List.from(_pairSubscriptions)) {
+      final controller = sub['controller'] as StreamController<List<IGRequestModel>>;
+      final pairId = sub['pairId'] as String?;
+      
+      if (!controller.isClosed) {
+        final filtered = _requests.where((r) => r.pairId == pairId).toList();
+        filtered.sort((a, b) => (b.updatedAt ?? DateTime.now()).compareTo(a.updatedAt ?? DateTime.now()));
+        controller.add(filtered);
+      }
+    }
+
+    for (final sub in List.from(_requestByIdSubscriptions)) {
+      final controller = sub['controller'] as StreamController<IGRequestModel?>;
+      final requestId = sub['requestId'] as String;
+      
+      if (!controller.isClosed) {
+        final matches = _requests.where((r) => r.id == requestId).toList();
+        controller.add(matches.isNotEmpty ? matches.first : null);
       }
     }
   }
@@ -371,6 +466,12 @@ class FirestoreService extends ChangeNotifier {
       (sub['controller'] as StreamController).close();
     }
     for (final sub in _sentSubscriptions) {
+      (sub['controller'] as StreamController).close();
+    }
+    for (final sub in _pairSubscriptions) {
+      (sub['controller'] as StreamController).close();
+    }
+    for (final sub in _requestByIdSubscriptions) {
       (sub['controller'] as StreamController).close();
     }
     super.dispose();

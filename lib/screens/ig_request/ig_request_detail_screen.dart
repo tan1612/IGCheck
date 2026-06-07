@@ -255,10 +255,8 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     // Read the passed request object from arguments to get the image URL
     final argRequest = ModalRoute.of(context)!.settings.arguments as IGRequestModel;
     final firestoreService = Provider.of<FirestoreService>(context, listen: false);
-    final request = firestoreService.requests.firstWhere(
-      (r) => r.id == argRequest.id,
-      orElse: () => argRequest,
-    );
+    final request = await firestoreService.getRequestById(argRequest.id) ?? argRequest;
+    if (!mounted) return;
 
     if (request.originalImageUrl.isEmpty) return;
 
@@ -321,425 +319,428 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     // Read the passed request object from arguments
     final argRequest = ModalRoute.of(context)!.settings.arguments as IGRequestModel;
     
-    // Listen to firestore service updates to get the realtime version of this request
-    final firestoreService = Provider.of<FirestoreService>(context);
-    final request = firestoreService.requests.firstWhere(
-      (r) => r.id == argRequest.id,
-      orElse: () => argRequest,
-    );
-
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
     final authService = Provider.of<AuthService>(context, listen: false);
     final user = authService.currentUser;
-    final isSender = request.senderId == user?.uid;
-    final isReceiver = request.receiverId == user?.uid;
 
-    final senderName = authService.getUserById(request.senderId)?.name ?? 'Người gửi';
-    final receiverName = authService.getUserById(request.receiverId)?.name ?? 'Người nhận';
+    return StreamBuilder<IGRequestModel?>(
+      stream: firestoreService.streamRequestById(argRequest.id),
+      initialData: argRequest,
+      builder: (context, snapshot) {
+        final request = snapshot.data ?? argRequest;
+        
+        final isSender = request.senderId == user?.uid;
+        final isReceiver = request.receiverId == user?.uid;
 
-    // Populate feedback field on load if empty and we have existing feedback
-    if (_feedbackController.text.isEmpty && request.feedback.isNotEmpty) {
-      _feedbackController.text = request.feedback;
-    }
+        final senderName = authService.getUserById(request.senderId)?.name ?? 'Người gửi';
+        final receiverName = authService.getUserById(request.receiverId)?.name ?? 'Người nhận';
 
-    final isInstagram = request.accountType == 'instagram';
+        // Populate feedback field on load if empty and we have existing feedback
+        if (_feedbackController.text.isEmpty && request.feedback.isNotEmpty) {
+          _feedbackController.text = request.feedback;
+        }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(request.instagramUsername),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {
-              final shareText = '${isInstagram ? "Instagram" : "Facebook"}: ${request.instagramUsername}\nPass: ${request.password}\n2FA: ${request.twoFactorKey}';
-              Clipboard.setData(ClipboardData(text: shareText));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Đã sao chép toàn bộ thông tin đăng nhập!'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
-            tooltip: 'Chia sẻ thông tin đăng nhập',
-          )
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Info Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Thông tin hồ sơ',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
-                          ),
-                          StatusChip(status: request.status),
-                        ],
-                      ),
-                      const Divider(height: 24),
-                      _buildInfoRow(
-                        isInstagram ? 'Tài khoản IG' : 'UID Facebook', 
-                        request.instagramUsername,
-                      ),
-                      if (request.displayName.isNotEmpty)
-                        _buildInfoRow('Tên hiển thị', request.displayName),
-                      _buildInfoRow('Người gửi', senderName),
-                      _buildInfoRow('Người nhận', receiverName),
-                      _buildInfoRow('Ghi chú', request.note.isNotEmpty ? request.note : '(Không có ghi chú)'),
-                      _buildInfoRow(
-                        'Thời gian gửi',
-                        AppDateUtils.formatDateTime(request.createdAt),
-                      ),
-                      _buildInfoRow(
-                        'Cập nhật cuối',
-                        AppDateUtils.formatDateTime(request.updatedAt),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Attachment Card
-              if (request.originalImageUrl.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Tệp đính kèm',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
-                        ),
-                        const Divider(height: 24),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.image_outlined, color: Colors.blue, size: 24),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'anh_xac_minh.jpg (Size: ${(request.imageSizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB)',
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.download_rounded, color: Colors.blue, size: 20),
-                                    onPressed: _isSubmitting ? null : () => _downloadImage(request.originalImageUrl),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  )
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  icon: const Icon(Icons.scanner_rounded, size: 18),
-                                  label: const Text('AI quét họ tên đối chiếu'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.purple.shade50,
-                                    foregroundColor: Colors.purple,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  onPressed: _isScanning ? null : _scanNameAI,
-                                ),
-                              ),
-                              if (_aiExtractedName != null) ...[
-                                const SizedBox(height: 12),
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.green.shade200),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Row(
-                                        children: [
-                                          Icon(Icons.check_circle_outline, color: Colors.green, size: 16),
-                                          SizedBox(width: 6),
-                                          Text('[Kết quả quét AI]', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '- Họ tên trên giấy tờ: $_aiExtractedName',
-                                        style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w500),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              // 2. Credentials Card
-              if (request.password.isNotEmpty || request.twoFactorKey.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Thông tin đăng nhập clone',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
-                        ),
-                        const Divider(height: 24),
-                        // Username Field
-                        _buildCredentialField(
-                          label: isInstagram ? 'Tài khoản' : 'UID',
-                          value: (isInstagram && request.instagramUsername.startsWith('@'))
-                              ? request.instagramUsername.substring(1)
-                              : request.instagramUsername,
-                          obscured: false,
-                        ),
-                        if (request.password.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          // Password Field
-                          _buildCredentialField(
-                            label: 'Mật khẩu',
-                            value: request.password,
-                            obscured: _isPasswordObscured,
-                            onToggleObscure: () {
-                              setState(() {
-                                _isPasswordObscured = !_isPasswordObscured;
-                              });
-                            },
-                          ),
-                        ],
-                        if (request.twoFactorKey.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          // 2FA Key Field
-                          _buildCredentialField(
-                            label: 'Mã bảo mật 2FA',
-                            value: request.twoFactorKey,
-                            obscured: false,
-                            isTwoFactor: true,
-                          ),
-                          if (_currentOtp.isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            _buildCredentialField(
-                              label: 'Mã OTP 2FA hiện tại',
-                              value: _currentOtp,
-                              obscured: false,
-                              onRefreshOtp: () => _generateOtpInline(request.twoFactorKey),
-                            ),
-                          ],
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              // 3. Feedback Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Phản hồi kiểm tra',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
-                      ),
-                      const Divider(height: 20),
-                      if (request.feedback.isNotEmpty) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF2F2F7),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            request.feedback,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF1C1C1E),
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ] else if (!isReceiver) ...[
-                        const Text(
-                          'Chưa có phản hồi nào.',
-                          style: TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      // Receiver input for feedback
-                      if (isReceiver && request.status != 'approved') ...[
-                        TextField(
-                          controller: _feedbackController,
-                          maxLines: 3,
-                          style: const TextStyle(fontSize: 14),
-                          decoration: InputDecoration(
-                            hintText: 'Nhập ý kiến phản hồi tại đây...',
-                            fillColor: const Color(0xFFF8F9FA),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFFE5E5EA)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        AppButton(
-                          text: 'Gửi phản hồi',
-                          type: AppButtonType.secondary,
-                          isLoading: _isSubmitting,
-                          onPressed: () => _submitFeedbackOnly(request),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              // 4. Role Action Buttons
-              // IF current user is RECEIVER: show review action CTAs
-              if (isReceiver && request.status != 'approved') ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        text: 'Đã tạch',
-                        type: AppButtonType.danger,
-                        isLoading: _isSubmitting,
-                        onPressed: () => _updateStatus(request, 'rejected'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: AppButton(
-                        text: 'Đã up',
-                        type: AppButtonType.secondary,
-                        isLoading: _isSubmitting,
-                        onPressed: () => _updateStatus(request, 'uploaded'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                AppButton(
-                  text: 'Đã xanh',
-                  isLoading: _isSubmitting,
-                  onPressed: () => _updateStatus(request, 'approved'),
-                ),
-              ],
-              // IF current user is SENDER and request is rejected / needs update: show edit button
-              if (isSender && (request.status == 'rejected' || request.status == 'needs_update')) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF3CD),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFFEEBA)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info, color: Colors.orange),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          request.status == 'needs_update'
-                              ? 'Hồ sơ này cần sửa lại theo phản hồi.'
-                              : 'Hồ sơ này đã tạch (Lần ${request.rejectionCount}/3). Vui lòng sửa thông tin và đính kèm ảnh khác. Nếu tạch 3 lần sẽ tự động bị xóa!',
-                          style: const TextStyle(fontSize: 13, color: Colors.brown, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                AppButton(
-                  text: request.status == 'rejected' ? 'Sửa & Gửi ảnh khác' : 'Sửa thông tin tài khoản',
-                  icon: Icons.edit_outlined,
-                  onPressed: () {
-                    Navigator.pushNamed(
-                      context,
-                      '/edit_ig_request',
-                      arguments: request,
-                    );
-                  },
-                ),
-              ],
-              const SizedBox(height: 24),
-              // Nút xóa (Đã bán)
-              AppButton(
-                text: 'Đã bán (Xóa hồ sơ)',
-                type: AppButtonType.danger,
-                icon: Icons.delete_outline,
-                isLoading: _isSubmitting,
+        final isInstagram = request.accountType == 'instagram';
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F6FA),
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new),
+              onPressed: () => Navigator.pop(context),
+            ),
+            title: Text(request.instagramUsername),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.share_outlined),
                 onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Xác nhận xóa'),
-                      content: const Text('Bạn có chắc chắn tài khoản này đã bán và muốn xóa hồ sơ vĩnh viễn khỏi hệ thống không?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Hủy'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _deleteRequest(request.id);
-                          },
-                          child: const Text('Xóa ngay', style: TextStyle(color: Colors.red)),
-                        ),
-                      ],
+                  final shareText = '${isInstagram ? "Instagram" : "Facebook"}: ${request.instagramUsername}\nPass: ${request.password}\n2FA: ${request.twoFactorKey}';
+                  Clipboard.setData(ClipboardData(text: shareText));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Đã sao chép toàn bộ thông tin đăng nhập!'),
+                      duration: Duration(seconds: 1),
                     ),
                   );
                 },
-              ),
-              const SizedBox(height: 40),
+                tooltip: 'Chia sẻ thông tin đăng nhập',
+              )
             ],
           ),
-        ),
-      ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Info Card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Thông tin hồ sơ',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                              ),
+                              StatusChip(status: request.status),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          _buildInfoRow(
+                            isInstagram ? 'Tài khoản IG' : 'UID Facebook', 
+                            request.instagramUsername,
+                          ),
+                          if (request.displayName.isNotEmpty)
+                            _buildInfoRow('Tên hiển thị', request.displayName),
+                          _buildInfoRow('Người gửi', senderName),
+                          _buildInfoRow('Người nhận', receiverName),
+                          _buildInfoRow('Ghi chú', request.note.isNotEmpty ? request.note : '(Không có ghi chú)'),
+                          _buildInfoRow(
+                            'Thời gian gửi',
+                            AppDateUtils.formatDateTime(request.createdAt),
+                          ),
+                          _buildInfoRow(
+                            'Cập nhật cuối',
+                            AppDateUtils.formatDateTime(request.updatedAt),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Attachment Card
+                  if (request.originalImageUrl.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tệp đính kèm',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                            ),
+                            const Divider(height: 24),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.image_outlined, color: Colors.blue, size: 24),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'anh_xac_minh.jpg (Size: ${(request.imageSizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB)',
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.download_rounded, color: Colors.blue, size: 20),
+                                        onPressed: _isSubmitting ? null : () => _downloadImage(request.originalImageUrl),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      )
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.scanner_rounded, size: 18),
+                                      label: const Text('AI quét họ tên đối chiếu'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.purple.shade50,
+                                        foregroundColor: Colors.purple,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                      onPressed: _isScanning ? null : _scanNameAI,
+                                    ),
+                                  ),
+                                  if (_aiExtractedName != null) ...[
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.green.shade200),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Row(
+                                            children: [
+                                              Icon(Icons.check_circle_outline, color: Colors.green, size: 16),
+                                              SizedBox(width: 6),
+                                              Text('[Kết quả quét AI]', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '- Họ tên trên giấy tờ: $_aiExtractedName',
+                                            style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w500),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  // 2. Credentials Card
+                  if (request.password.isNotEmpty || request.twoFactorKey.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Thông tin đăng nhập clone',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                            ),
+                            const Divider(height: 24),
+                            // Username Field
+                            _buildCredentialField(
+                              label: isInstagram ? 'Tài khoản' : 'UID',
+                              value: (isInstagram && request.instagramUsername.startsWith('@'))
+                                  ? request.instagramUsername.substring(1)
+                                  : request.instagramUsername,
+                              obscured: false,
+                            ),
+                            if (request.password.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              // Password Field
+                              _buildCredentialField(
+                                label: 'Mật khẩu',
+                                value: request.password,
+                                obscured: _isPasswordObscured,
+                                onToggleObscure: () {
+                                  setState(() {
+                                    _isPasswordObscured = !_isPasswordObscured;
+                                  });
+                                },
+                              ),
+                            ],
+                            if (request.twoFactorKey.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              // 2FA Key Field
+                              _buildCredentialField(
+                                label: 'Mã bảo mật 2FA',
+                                value: request.twoFactorKey,
+                                obscured: false,
+                                isTwoFactor: true,
+                              ),
+                              if (_currentOtp.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                _buildCredentialField(
+                                  label: 'Mã OTP 2FA hiện tại',
+                                  value: _currentOtp,
+                                  obscured: false,
+                                  onRefreshOtp: () => _generateOtpInline(request.twoFactorKey),
+                                ),
+                              ],
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  // 3. Feedback Card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Phản hồi kiểm tra',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                          ),
+                          const Divider(height: 20),
+                          if (request.feedback.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF2F2F7),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                request.feedback,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF1C1C1E),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ] else if (!isReceiver) ...[
+                            const Text(
+                              'Chưa có phản hồi nào.',
+                              style: TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          // Receiver input for feedback
+                          if (isReceiver && request.status != 'approved') ...[
+                            TextField(
+                              controller: _feedbackController,
+                              maxLines: 3,
+                              style: const TextStyle(fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Nhập ý kiến phản hồi tại đây...',
+                                fillColor: const Color(0xFFF8F9FA),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: Color(0xFFE5E5EA)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            AppButton(
+                              text: 'Gửi phản hồi',
+                              type: AppButtonType.secondary,
+                              isLoading: _isSubmitting,
+                              onPressed: () => _submitFeedbackOnly(request),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // 4. Role Action Buttons
+                  // IF current user is RECEIVER: show review action CTAs
+                  if (isReceiver && request.status != 'approved') ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppButton(
+                            text: 'Đã tạch',
+                            type: AppButtonType.danger,
+                            isLoading: _isSubmitting,
+                            onPressed: () => _updateStatus(request, 'rejected'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: AppButton(
+                            text: 'Đã up',
+                            type: AppButtonType.secondary,
+                            isLoading: _isSubmitting,
+                            onPressed: () => _updateStatus(request, 'uploaded'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    AppButton(
+                      text: 'Đã xanh',
+                      isLoading: _isSubmitting,
+                      onPressed: () => _updateStatus(request, 'approved'),
+                    ),
+                  ],
+                  // IF current user is SENDER and request is rejected / needs update: show edit button
+                  if (isSender && (request.status == 'rejected' || request.status == 'needs_update')) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3CD),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFEEBA)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              request.status == 'needs_update'
+                                  ? 'Hồ sơ này cần sửa lại theo phản hồi.'
+                                  : 'Hồ sơ này đã tạch (Lần ${request.rejectionCount}/3). Vui lòng sửa thông tin và đính kèm ảnh khác. Nếu tạch 3 lần sẽ tự động bị xóa!',
+                              style: const TextStyle(fontSize: 13, color: Colors.brown, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    AppButton(
+                      text: request.status == 'rejected' ? 'Sửa & Gửi ảnh khác' : 'Sửa thông tin tài khoản',
+                      icon: Icons.edit_outlined,
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/edit_ig_request',
+                          arguments: request,
+                        );
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  // Nút xóa (Đã bán)
+                  AppButton(
+                    text: 'Đã bán (Xóa hồ sơ)',
+                    type: AppButtonType.danger,
+                    icon: Icons.delete_outline,
+                    isLoading: _isSubmitting,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Xác nhận xóa'),
+                          content: const Text('Bạn có chắc chắn tài khoản này đã bán và muốn xóa hồ sơ vĩnh viễn khỏi hệ thống không?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Hủy'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                _deleteRequest(request.id);
+                              },
+                              child: const Text('Xóa ngay', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

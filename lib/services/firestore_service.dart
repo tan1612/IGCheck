@@ -313,13 +313,26 @@ class FirestoreService extends ChangeNotifier {
     if (status == 'uploaded') action = 'uploaded';
 
     if (useFirebase) {
-      await FirebaseFirestore.instance.collection('requests').doc(requestId).update({
+      final docRef = FirebaseFirestore.instance.collection('requests').doc(requestId);
+      if (status == 'rejected') {
+        final docSnapshot = await docRef.get();
+        if (docSnapshot.exists) {
+          final count = docSnapshot.data()?['rejectionCount'] as int? ?? 0;
+          if (count + 1 >= 3) {
+            await deleteRequest(requestId);
+            return;
+          }
+        }
+      }
+
+      await docRef.update({
         'status': status,
         'feedback': feedback,
         'lastUpdatedBy': userId,
         'lastAction': action,
         'updatedAt': FieldValue.serverTimestamp(),
         'reviewedAt': FieldValue.serverTimestamp(),
+        if (status == 'rejected') 'rejectionCount': FieldValue.increment(1),
       });
     } else {
       final index = _requests.indexWhere((r) => r.id == requestId);
@@ -333,9 +346,25 @@ class FirestoreService extends ChangeNotifier {
         lastAction: action,
         updatedAt: DateTime.now(),
         reviewedAt: DateTime.now(),
+        rejectionCount: status == 'rejected' ? existing.rejectionCount + 1 : existing.rejectionCount,
       );
 
+      if (updated.rejectionCount >= 3) {
+        await deleteRequest(requestId);
+        return;
+      }
+
       _requests[index] = updated;
+      _notifySubscriptions();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteRequest(String requestId) async {
+    if (useFirebase) {
+      await FirebaseFirestore.instance.collection('requests').doc(requestId).delete();
+    } else {
+      _requests.removeWhere((r) => r.id == requestId);
       _notifySubscriptions();
       notifyListeners();
     }

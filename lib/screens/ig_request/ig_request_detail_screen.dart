@@ -159,6 +159,28 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     }
   }
 
+  Future<void> _deleteRequest(String requestId) async {
+    setState(() => _isSubmitting = true);
+    try {
+      final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+      await firestoreService.deleteRequest(requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã xóa hồ sơ (Đã bán)!')),
+        );
+        Navigator.pop(context); // Go back to inbox
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi xóa: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   Future<void> _downloadImage(String imageUrl) async {
     if (imageUrl.isEmpty) return;
     
@@ -625,7 +647,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                         child: Text(
                           request.status == 'needs_update'
                               ? 'Hồ sơ này cần sửa lại theo phản hồi.'
-                              : 'Hồ sơ này đã tạch. Vui lòng sửa thông tin và đính kèm ảnh khác.',
+                              : 'Hồ sơ này đã tạch (Lần ${request.rejectionCount}/3). Vui lòng sửa thông tin và đính kèm ảnh khác. Nếu tạch 3 lần sẽ tự động bị xóa!',
                           style: const TextStyle(fontSize: 13, color: Colors.brown, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -645,6 +667,36 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                   },
                 ),
               ],
+              const SizedBox(height: 24),
+              // Nút xóa (Đã bán)
+              AppButton(
+                text: 'Đã bán (Xóa hồ sơ)',
+                type: AppButtonType.danger,
+                icon: Icons.delete_outline,
+                isLoading: _isSubmitting,
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Xác nhận xóa'),
+                      content: const Text('Bạn có chắc chắn tài khoản này đã bán và muốn xóa hồ sơ vĩnh viễn khỏi hệ thống không?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Hủy'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _deleteRequest(request.id);
+                          },
+                          child: const Text('Xóa ngay', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 40),
             ],
           ),

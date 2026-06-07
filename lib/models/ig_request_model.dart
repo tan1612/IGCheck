@@ -23,6 +23,7 @@ class IGRequestModel {
   final DateTime? updatedAt;
   final DateTime? reviewedAt;
   final String accountType; // 'instagram' or 'facebook'
+  final int rejectionCount; // Number of times rejected
 
   IGRequestModel({
     required this.id,
@@ -47,6 +48,7 @@ class IGRequestModel {
     this.updatedAt,
     this.reviewedAt,
     this.accountType = 'instagram',
+    this.rejectionCount = 0,
   });
 
   IGRequestModel copyWith({
@@ -72,6 +74,7 @@ class IGRequestModel {
     DateTime? updatedAt,
     DateTime? reviewedAt,
     String? accountType,
+    int? rejectionCount,
   }) {
     return IGRequestModel(
       id: id ?? this.id,
@@ -96,6 +99,7 @@ class IGRequestModel {
       updatedAt: updatedAt ?? this.updatedAt,
       reviewedAt: reviewedAt ?? this.reviewedAt,
       accountType: accountType ?? this.accountType,
+      rejectionCount: rejectionCount ?? this.rejectionCount,
     );
   }
 
@@ -123,6 +127,7 @@ class IGRequestModel {
       updatedAt: _parseDate(json['updatedAt']),
       reviewedAt: _parseDate(json['reviewedAt']),
       accountType: json['accountType'] as String? ?? 'instagram',
+      rejectionCount: json['rejectionCount'] as int? ?? 0,
     );
   }
 
@@ -155,8 +160,9 @@ class IGRequestModel {
       'lastAction': lastAction,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
-      'reviewedAt': reviewedAt?.toIso8601String(),
+      'reviewedAt': reviewedAt != null ? Timestamp.fromDate(reviewedAt!) : null,
       'accountType': accountType,
+      'rejectionCount': rejectionCount,
     };
   }
 }

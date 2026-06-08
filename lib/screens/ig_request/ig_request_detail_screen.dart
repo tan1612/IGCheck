@@ -385,9 +385,10 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                           _buildInfoRow(
                             isInstagram ? 'Tài khoản IG' : 'UID Facebook', 
                             request.instagramUsername,
+                            copyable: true,
                           ),
                           if (request.displayName.isNotEmpty)
-                            _buildInfoRow('Tên hiển thị', request.displayName),
+                            _buildInfoRow('Tên hiển thị', request.displayName, copyable: true),
                           _buildInfoRow('Người gửi', senderName),
                           _buildInfoRow('Người nhận', receiverName),
                           _buildInfoRow('Ghi chú', request.note.isNotEmpty ? request.note : '(Không có ghi chú)'),
@@ -770,27 +771,56 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF8E8E93)),
-            ),
+  Widget _buildInfoRow(String label, String value, {bool copyable = false}) {
+    return Builder(
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 110,
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF8E8E93)),
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1C1C1E)),
+                      ),
+                    ),
+                    if (copyable) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: value));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Đã sao chép $label vào bộ nhớ tạm.'),
+                              duration: const Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                        child: const Icon(
+                          Icons.copy_rounded,
+                          size: 18,
+                          color: Color(0xFF8E8EF8),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1C1C1E)),
-            ),
-          ),
-        ],
-      ),
+        );
+      }
     );
   }
 

@@ -256,6 +256,13 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
     if (mounted) {
       Navigator.pop(context);
       
+      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI:');
+      if (isSuccess) {
+        await Clipboard.setData(ClipboardData(text: resultName));
+      }
+
+      if (!mounted) return;
+
       setState(() {
         _isScanning = false;
         if (resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && resultName != 'LỖI QUÉT ẢNH') {
@@ -268,7 +275,9 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
           content: Text(
             resultName == null 
               ? 'Chưa cấu hình API Key, vui lòng kiểm tra lại.'
-              : 'AI đã nhận diện: $resultName'
+              : isSuccess
+                ? 'AI đã nhận diện & sao chép: $resultName'
+                : 'AI đã nhận diện: $resultName'
           ),
         ),
       );

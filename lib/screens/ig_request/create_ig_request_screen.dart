@@ -366,6 +366,13 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       // Dismiss dialog
       Navigator.pop(context);
       
+      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI:');
+      if (isSuccess) {
+        await Clipboard.setData(ClipboardData(text: resultName));
+      }
+
+      if (!mounted) return;
+
       setState(() {
         _isScanning = false;
         if (resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && resultName != 'LỖI QUÉT ẢNH') {
@@ -378,7 +385,9 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
           content: Text(
             resultName == null 
               ? 'Chưa cấu hình API Key, vui lòng kiểm tra lại.'
-              : 'AI đã nhận diện: $resultName'
+              : isSuccess
+                ? 'AI đã nhận diện & sao chép: $resultName'
+                : 'AI đã nhận diện: $resultName'
           ),
         ),
       );

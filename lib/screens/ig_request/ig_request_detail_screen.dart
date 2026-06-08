@@ -287,6 +287,14 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
 
     if (mounted) {
       Navigator.pop(context);
+
+      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI:');
+      if (isSuccess) {
+        await Clipboard.setData(ClipboardData(text: resultName));
+      }
+
+      if (!mounted) return;
+
       setState(() {
         _isScanning = false;
         if (resultName == null) {
@@ -297,6 +305,15 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
           );
         } else {
           _aiExtractedName = resultName;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                isSuccess
+                    ? 'AI đã nhận diện & sao chép: $resultName'
+                    : 'AI đã nhận diện: $resultName'
+              ),
+            ),
+          );
         }
       });
     }

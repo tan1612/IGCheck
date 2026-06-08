@@ -99,7 +99,9 @@ class StorageService {
   }
 
   Future<String> _fallbackUpload(XFile file) async {
+    // 1. Try Catbox.moe
     try {
+      debugPrint('Attempting Catbox.moe upload...');
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
@@ -113,12 +115,81 @@ class StorageService {
       });
       final response = await dio.post('https://catbox.moe/user/api.php', data: formData);
       if (response.statusCode == 200) {
-        return response.data.toString();
+        final url = response.data.toString().trim();
+        if (url.startsWith('http')) {
+          debugPrint('Catbox.moe upload successful: $url');
+          return url;
+        }
       }
     } catch (e) {
-      debugPrint('Catbox upload error: $e');
-      throw Exception('Không thể upload ảnh (Kể cả máy chủ dự phòng cũng lỗi). Vui lòng kiểm tra lại mạng hoặc nâng cấp gói Firebase Storage.');
+      debugPrint('Catbox upload failed: $e');
     }
-    return '';
+
+    // 2. Try Tmpfiles.org
+    try {
+      debugPrint('Attempting Tmpfiles.org upload...');
+      final url = await _uploadToTmpfiles(file);
+      if (url.startsWith('http')) {
+        debugPrint('Tmpfiles.org upload successful: $url');
+        return url;
+      }
+    } catch (e) {
+      debugPrint('Tmpfiles upload failed: $e');
+    }
+
+    // 3. Try 0x0.st
+    try {
+      debugPrint('Attempting 0x0.st upload...');
+      final url = await _uploadTo0x0(file);
+      if (url.startsWith('http')) {
+        debugPrint('0x0.st upload successful: $url');
+        return url;
+      }
+    } catch (e) {
+      debugPrint('0x0.st upload failed: $e');
+    }
+
+    throw Exception('Không thể upload ảnh (Kể cả các máy chủ dự phòng Catbox, Tmpfiles, 0x0.st đều gặp lỗi). Vui lòng kiểm tra lại kết nối mạng hoặc nâng cấp gói Firebase Storage.');
+  }
+
+  Future<String> _uploadToTmpfiles(XFile file) async {
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ));
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        await file.readAsBytes(),
+        filename: file.name.isNotEmpty ? file.name : 'image.jpg',
+      ),
+    });
+    final response = await dio.post('https://tmpfiles.org/api/v1/upload', data: formData);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = response.data;
+      if (data is Map && data['data'] != null && data['data']['url'] != null) {
+        final url = data['data']['url'].toString();
+        // Replace tmpfiles.org/ with tmpfiles.org/dl/ for direct link
+        return url.replaceFirst('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+      }
+    }
+    throw Exception('Tmpfiles upload response invalid');
+  }
+
+  Future<String> _uploadTo0x0(XFile file) async {
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ));
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        await file.readAsBytes(),
+        filename: file.name.isNotEmpty ? file.name : 'image.jpg',
+      ),
+    });
+    final response = await dio.post('https://0x0.st', data: formData);
+    if (response.statusCode == 200) {
+      return response.data.toString().trim();
+    }
+    throw Exception('0x0.st upload response invalid');
   }
 }

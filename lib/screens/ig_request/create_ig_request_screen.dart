@@ -163,12 +163,19 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Đã nhập thành công tài khoản: ${acc['username']}')),
+            SnackBar(
+              content: Text('Đã nhập thành công tài khoản: ${acc['username']}'),
+              action: SnackBarAction(
+                label: 'XÓA NOTEPAD',
+                onPressed: () => _confirmAndClearNotepad(alias),
+                textColor: Colors.redAccent,
+              ),
+            ),
           );
         }
       } else {
         if (mounted) {
-          _showAccountSelectionBottomSheet(accounts);
+          _showAccountSelectionBottomSheet(accounts, alias);
         }
       }
     } catch (e) {
@@ -205,7 +212,83 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     }
   }
 
-  void _showAccountSelectionBottomSheet(List<Map<String, String>> accounts) {
+  Future<void> _confirmAndClearNotepad(String alias) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận xóa dữ liệu'),
+        content: Text('Bạn có chắc chắn muốn xóa toàn bộ dữ liệu trên Notepad (note.2fa.live/$alias) để bảo mật không? Hành động này sẽ ghi đè nội dung trống lên Notepad.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _clearNotepad(alias);
+            },
+            child: const Text('Xóa dữ liệu', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearNotepad(String alias) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.red),
+            SizedBox(width: 20),
+            Expanded(child: Text('Đang xóa dữ liệu Notepad...')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final dio = Dio();
+      dio.options.connectTimeout = const Duration(seconds: 10);
+      final response = await dio.post(
+        'https://note.2fa.live/note/$alias',
+        data: {'content': ''},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        if (data is Map && data['r'] != null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Đã xóa sạch dữ liệu trên note.2fa.live/$alias để bảo mật thành công!')),
+            );
+          }
+          return;
+        }
+      }
+      throw Exception('Không nhận được phản hồi thành công từ Notepad.');
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog if open
+      }
+      debugPrint('Lỗi xóa Notepad: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi xóa dữ liệu Notepad: $e')),
+        );
+      }
+    }
+  }
+
+  void _showAccountSelectionBottomSheet(List<Map<String, String>> accounts, String alias) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -249,7 +332,14 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                         });
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Đã nhập thành công tài khoản: ${acc['username']}')),
+                          SnackBar(
+                            content: Text('Đã nhập thành công tài khoản: ${acc['username']}'),
+                            action: SnackBarAction(
+                              label: 'XÓA NOTEPAD',
+                              onPressed: () => _confirmAndClearNotepad(alias),
+                              textColor: Colors.redAccent,
+                            ),
+                          ),
                         );
                       },
                     );
@@ -734,34 +824,63 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                   onChanged: _parseQuickImport,
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: Icon(
-                      _accountType == 'instagram' ? Icons.alternate_email : Icons.facebook_outlined,
-                      size: 18,
-                    ),
-                    label: Text(
-                      _accountType == 'instagram' 
-                          ? 'Nhập danh sách từ note.2fa.live/instagram' 
-                          : 'Nhập danh sách từ note.2fa.live/facebook',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.primaryColor,
-                      side: BorderSide(color: theme.primaryColor),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: Icon(
+                          _accountType == 'instagram' ? Icons.alternate_email : Icons.facebook_outlined,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _accountType == 'instagram' 
+                              ? 'Nhập danh sách từ note.2fa.live/instagram' 
+                              : 'Nhập danh sách từ note.2fa.live/facebook',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: theme.primaryColor,
+                          side: BorderSide(color: theme.primaryColor),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          final url = _accountType == 'instagram' 
+                              ? 'https://note.2fa.live/instagram' 
+                              : 'https://note.2fa.live/facebook';
+                          _importFromNotepad(url, filterDuplicates: true);
+                        },
                       ),
                     ),
-                    onPressed: () {
-                      final url = _accountType == 'instagram' 
-                          ? 'https://note.2fa.live/instagram' 
-                          : 'https://note.2fa.live/facebook';
-                      _importFromNotepad(url, filterDuplicates: true);
-                    },
-                  ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                        label: Text(
+                          _accountType == 'instagram' 
+                              ? 'Xóa dữ liệu trên note.2fa.live/instagram' 
+                              : 'Xóa dữ liệu trên note.2fa.live/facebook',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          final alias = _accountType == 'instagram' ? 'instagram' : 'facebook';
+                          _confirmAndClearNotepad(alias);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 const Divider(),

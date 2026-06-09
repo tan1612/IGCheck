@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/ig_request_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
@@ -467,40 +466,6 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                       )
                                     ],
                                   ),
-                                  if (request.originalImageUrl.isNotEmpty) ...[
-                                    const SizedBox(height: 12),
-                                    GestureDetector(
-                                      onTap: () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/fullscreen_image',
-                                          arguments: {
-                                            'url': request.originalImageUrl,
-                                            'username': request.instagramUsername,
-                                          },
-                                        );
-                                      },
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: CachedNetworkImage(
-                                          imageUrl: request.thumbnailImageUrl.isNotEmpty ? request.thumbnailImageUrl : request.originalImageUrl,
-                                          height: 160,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          placeholder: (context, url) => Container(
-                                            height: 160,
-                                            color: Colors.grey.shade200,
-                                            child: const Center(child: CircularProgressIndicator()),
-                                          ),
-                                          errorWidget: (context, url, error) => Container(
-                                            height: 160,
-                                            color: Colors.grey.shade200,
-                                            child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                   const SizedBox(height: 12),
                                   SizedBox(
                                     width: double.infinity,

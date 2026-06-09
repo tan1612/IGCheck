@@ -49,18 +49,38 @@ class DownloadService {
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/temp_download_${DateTime.now().millisecondsSinceEpoch}$extension';
 
-      await _dio.download(
-        downloadUrl,
-        tempPath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            final percent = (received / total * 100).toStringAsFixed(0);
-            onStatusChanged('Đang tải ảnh: $percent%');
-          } else {
-            onStatusChanged('Đang tải ảnh (${(received / 1024).toStringAsFixed(0)} KB)...');
-          }
-        },
-      );
+      try {
+        // Sử dụng wsrv.nl (Cloudflare CDN) để nén ảnh ở chất lượng 85% và tăng tốc download ở Việt Nam
+        final proxyUrl = 'https://wsrv.nl/?url=${Uri.encodeComponent(downloadUrl)}&q=85';
+        debugPrint('DownloadService: Đang tải qua CDN proxy: $proxyUrl');
+        await _dio.download(
+          proxyUrl,
+          tempPath,
+          onReceiveProgress: (received, total) {
+            if (total != -1) {
+              final percent = (received / total * 100).toStringAsFixed(0);
+              onStatusChanged('Đang tải ảnh: $percent%');
+            } else {
+              onStatusChanged('Đang tải ảnh (${(received / 1024).toStringAsFixed(0)} KB)...');
+            }
+          },
+        );
+      } catch (proxyError) {
+        debugPrint('DownloadService: Lỗi tải qua proxy ($proxyError). Đang tải trực tiếp từ nguồn...');
+        // Fallback: Tải trực tiếp nếu proxy có sự cố
+        await _dio.download(
+          downloadUrl,
+          tempPath,
+          onReceiveProgress: (received, total) {
+            if (total != -1) {
+              final percent = (received / total * 100).toStringAsFixed(0);
+              onStatusChanged('Đang tải ảnh: $percent%');
+            } else {
+              onStatusChanged('Đang tải ảnh (${(received / 1024).toStringAsFixed(0)} KB)...');
+            }
+          },
+        );
+      }
 
       // Save the file to gallery
       final result = await ImageGallerySaver.saveFile(tempPath);
@@ -101,7 +121,17 @@ class DownloadService {
         final tempDir = await getTemporaryDirectory();
         final path = '${tempDir.path}/shared_image.jpg';
         
-        await _dio.download(url, path);
+        String downloadUrl = url;
+        if (downloadUrl.contains('pixeldrain.com')) {
+          downloadUrl = downloadUrl.replaceAll('pixeldrain.com', 'pixeldrain.net');
+        }
+
+        try {
+          final proxyUrl = 'https://wsrv.nl/?url=${Uri.encodeComponent(downloadUrl)}&q=85';
+          await _dio.download(proxyUrl, path);
+        } catch (_) {
+          await _dio.download(downloadUrl, path);
+        }
         
         await SharePlus.instance.share(
           ShareParams(

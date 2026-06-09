@@ -13,6 +13,7 @@ import 'screens/ig_request/create_ig_request_screen.dart';
 import 'screens/ig_request/ig_request_detail_screen.dart';
 import 'screens/ig_request/edit_ig_request_screen.dart';
 import 'screens/ig_request/fullscreen_image_screen.dart';
+import 'screens/tools/cookie_facebook_tool_screen.dart';
 
 class IGCheckApp extends StatelessWidget {
   const IGCheckApp({super.key});
@@ -40,6 +41,7 @@ class IGCheckApp extends StatelessWidget {
           '/ig_request_detail': (context) => const IGRequestDetailScreen(),
           '/edit_ig_request': (context) => const EditIGRequestScreen(),
           '/fullscreen_image': (context) => const FullscreenImageScreen(),
+          '/cookie_facebook_tool': (context) => const CookieFacebookToolScreen(),
         },
       ),
     );

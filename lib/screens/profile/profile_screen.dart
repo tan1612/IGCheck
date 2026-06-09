@@ -422,6 +422,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                // Utilities Card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Công cụ tiện ích',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1C1C1E),
+                          ),
+                        ),
+                        const Divider(height: 24),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: theme.primaryColor.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.cookie_outlined,
+                              color: theme.primaryColor,
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Trích xuất Link Checkpoint Facebook',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1C1C1E),
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Lấy nhanh link xác minh danh tính từ Cookie',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF8E8E93),
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFFC7C7CC),
+                          ),
+                          onTap: () {
+                            Navigator.pushNamed(context, '/cookie_facebook_tool');
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 32),
                 // Logout button
                 AppButton(

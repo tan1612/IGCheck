@@ -95,6 +95,32 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
       return;
     }
 
+    // Check duplicate display name (excluding current request)
+    final targetName = _displayNameController.text.trim();
+    if (targetName.isNotEmpty && user.pairId != null) {
+      final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
+      if (!mounted) return;
+      final alreadyExists = existingRequests.any((r) => 
+        r.id != request.id && r.displayName.trim().toLowerCase() == targetName.toLowerCase()
+      );
+      if (alreadyExists) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Hồ sơ đã tồn tại'),
+            content: Text('Họ tên "$targetName" đã tồn tại trong danh sách yêu cầu. Vui lòng tải lên ảnh xác minh khác.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Đồng ý'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isUploading = true);
 
     try {
@@ -258,6 +284,38 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
       
       final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI:');
       if (isSuccess) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+        final user = authService.currentUser;
+        final request = ModalRoute.of(context)!.settings.arguments as IGRequestModel;
+        if (user != null && user.pairId != null) {
+          final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
+          if (!mounted) return;
+          final normalizedResultName = resultName.trim().toLowerCase();
+          final alreadyExists = existingRequests.any((r) => 
+            r.id != request.id && r.displayName.trim().toLowerCase() == normalizedResultName
+          );
+          if (alreadyExists) {
+            setState(() {
+              _isScanning = false;
+              _selectedFile = null;
+            });
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Hồ sơ đã tồn tại'),
+                content: Text('Họ tên "$resultName" đã tồn tại trong danh sách yêu cầu. Vui lòng tải lên ảnh xác minh khác.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Đồng ý'),
+                  ),
+                ],
+              ),
+            );
+            return;
+          }
+        }
         await Clipboard.setData(ClipboardData(text: resultName));
       }
 

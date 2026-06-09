@@ -218,6 +218,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
         imageUrl,
         onStatusChanged: (status) {
           if (mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(status),
@@ -230,6 +231,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
       );
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Lỗi tải ảnh: $e')),
         );

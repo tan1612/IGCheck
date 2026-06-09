@@ -14,6 +14,7 @@ class _FullscreenImageScreenState extends State<FullscreenImageScreen> {
 
   void _showStatusToast(String message) {
     if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),

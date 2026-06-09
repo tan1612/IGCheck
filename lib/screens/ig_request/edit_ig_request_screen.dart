@@ -327,7 +327,7 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
 
       setState(() {
         _isScanning = false;
-        if (resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && resultName != 'LỖI QUÉT ẢNH') {
+        if (isSuccess) {
           _displayNameController.text = resultName;
         }
       });
@@ -339,7 +339,7 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
               ? 'Chưa cấu hình API Key, vui lòng kiểm tra lại.'
               : isSuccess
                 ? 'AI đã nhận diện & sao chép: $resultName'
-                : 'AI đã nhận diện: $resultName'
+                : resultName
           ),
         ),
       );

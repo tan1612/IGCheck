@@ -485,54 +485,78 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                     ),
                                   ),
                                   if (_aiExtractedName != null) ...[
-                                    const SizedBox(height: 12),
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.green.shade200),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Row(
-                                            children: [
-                                              Icon(Icons.check_circle_outline, color: Colors.green, size: 16),
-                                              SizedBox(width: 6),
-                                              Text('[Kết quả quét AI]', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
-                                            ],
+                                    Builder(
+                                      builder: (context) {
+                                        final isError = _aiExtractedName!.startsWith('LỖI:');
+                                        return Container(
+                                          margin: const EdgeInsets.only(top: 12),
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: isError ? Colors.red.shade50 : Colors.green.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: isError ? Colors.red.shade200 : Colors.green.shade200),
                                           ),
-                                          const SizedBox(height: 4),
-                                          Row(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Expanded(
-                                                child: Text(
-                                                  '- Họ tên trên giấy tờ: $_aiExtractedName',
-                                                  style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w500),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              GestureDetector(
-                                                onTap: () {
-                                                  Clipboard.setData(ClipboardData(text: _aiExtractedName!));
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text('Đã sao chép họ tên từ kết quả quét AI.'),
-                                                      duration: Duration(seconds: 1),
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    isError ? Icons.error_outline : Icons.check_circle_outline,
+                                                    color: isError ? Colors.red : Colors.green,
+                                                    size: 16,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    isError ? '[Lỗi quét AI]' : '[Kết quả quét AI]',
+                                                    style: TextStyle(
+                                                      color: isError ? Colors.red : Colors.green,
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
                                                     ),
-                                                  );
-                                                },
-                                                child: Icon(
-                                                  Icons.copy_rounded,
-                                                  size: 18,
-                                                  color: Colors.green.shade700,
-                                                ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      isError
+                                                          ? 'Chi tiết lỗi: $_aiExtractedName'
+                                                          : '- Họ tên trên giấy tờ: $_aiExtractedName',
+                                                      style: TextStyle(
+                                                        color: isError ? Colors.red.shade800 : Colors.green.shade800,
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (!isError && _aiExtractedName != 'KHÔNG ĐỌC ĐƯỢC') ...[
+                                                    const SizedBox(width: 8),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        Clipboard.setData(ClipboardData(text: _aiExtractedName!));
+                                                        ScaffoldMessenger.of(context).showSnackBar(
+                                                          const SnackBar(
+                                                            content: Text('Đã sao chép họ tên từ kết quả quét AI.'),
+                                                            duration: Duration(seconds: 1),
+                                                          ),
+                                                        );
+                                                      },
+                                                      child: Icon(
+                                                        Icons.copy_rounded,
+                                                        size: 18,
+                                                        color: Colors.green.shade700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
                                               ),
                                             ],
                                           ),
-                                        ],
-                                      ),
+                                        );
+                                      }
                                     ),
                                   ],
                                 ],

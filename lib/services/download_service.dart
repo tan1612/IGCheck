@@ -22,34 +22,51 @@ class DownloadService {
         }
       }
 
-      // Download image bytes
-      final response = await _dio.get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes),
-      );
+      // Determine file extension from URL or default to .jpg
+      String extension = '.jpg';
+      try {
+        final uri = Uri.parse(url);
+        final pathSegments = uri.pathSegments;
+        if (pathSegments.isNotEmpty) {
+          final lastSegment = pathSegments.last.toLowerCase();
+          if (lastSegment.contains('.png')) {
+            extension = '.png';
+          } else if (lastSegment.contains('.jpeg') || lastSegment.contains('.jpg')) {
+            extension = '.jpg';
+          } else if (lastSegment.contains('.gif')) {
+            extension = '.gif';
+          }
+        }
+      } catch (_) {}
 
-      if (response.data == null) {
-        onStatusChanged('Không thể tải ảnh, dữ liệu trống.');
-        return false;
-      }
+      // Download image to a temporary file
+      final tempDir = await getTemporaryDirectory();
+      final tempPath = '${tempDir.path}/temp_download_${DateTime.now().millisecondsSinceEpoch}$extension';
 
-      // Save to gallery
-      final result = await ImageGallerySaver.saveImage(
-        Uint8List.fromList(response.data!),
-        quality: 100,
-        name: 'IGCheck_${DateTime.now().millisecondsSinceEpoch}',
-      );
+      await _dio.download(url, tempPath);
+
+      // Save the file to gallery
+      final result = await ImageGallerySaver.saveFile(tempPath);
+
+      // Delete the temporary file after saving
+      try {
+        final file = File(tempPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
 
       if (result != null && result['isSuccess'] == true) {
         onStatusChanged('Đã lưu ảnh gốc vào thư viện.');
         return true;
       } else {
-        onStatusChanged('Không thể lưu ảnh, vui lòng thử lại.');
+        final errorMsg = result != null ? result['errorMessage'] : 'Lỗi hệ thống';
+        onStatusChanged('Không thể lưu ảnh: $errorMsg');
         return false;
       }
     } catch (e) {
       debugPrint('Lỗi tải/lưu ảnh: $e');
-      onStatusChanged('Không thể lưu ảnh, vui lòng thử lại.');
+      onStatusChanged('Lỗi: $e');
       return false;
     }
   }

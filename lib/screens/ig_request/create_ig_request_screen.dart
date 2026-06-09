@@ -878,6 +878,24 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                   labelText: 'Tên hiển thị (Tùy chọn)',
                   hintText: 'Ví dụ: Clone Số 1, Clone Giá Rẻ...',
                   prefixIcon: Icons.badge_outlined,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _displayNameController,
+                    builder: (context, value, child) {
+                      if (value.text.isEmpty) return const SizedBox.shrink();
+                      return IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                        onPressed: () {
+                          final val = _displayNameController.text.trim();
+                          if (val.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: val));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép tên hiển thị!'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 16),
                 AppTextField(

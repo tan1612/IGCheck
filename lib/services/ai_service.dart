@@ -29,11 +29,6 @@ class AIService {
     }
 
     try {
-      final model = GenerativeModel(
-        model: 'gemini-2.5-flash',
-        apiKey: _apiKey,
-      );
-
       final imageBytes = await imageFile.readAsBytes();
       
       final prompt = TextPart(
@@ -46,12 +41,33 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
       
       final imagePart = DataPart('image/jpeg', imageBytes);
 
-      final response = await model.generateContent([
-        Content.multi([prompt, imagePart])
-      ]);
+      // Thử model mới nhất trước (gemini-2.5-flash)
+      try {
+        debugPrint('AI Service: Đang thử với gemini-2.5-flash...');
+        final model = GenerativeModel(
+          model: 'gemini-2.5-flash',
+          apiKey: _apiKey,
+        );
+        final response = await model.generateContent([
+          Content.multi([prompt, imagePart])
+        ]);
 
-      if (response.text != null && response.text!.trim().isNotEmpty) {
-        return response.text!.trim();
+        if (response.text != null && response.text!.trim().isNotEmpty) {
+          return response.text!.trim();
+        }
+      } catch (e) {
+        debugPrint('Lỗi khi gọi model gemini-2.5-flash: $e. Đang thử lại với model dự phòng gemini-1.5-flash...');
+        final modelFallback = GenerativeModel(
+          model: 'gemini-1.5-flash',
+          apiKey: _apiKey,
+        );
+        final response = await modelFallback.generateContent([
+          Content.multi([prompt, imagePart])
+        ]);
+
+        if (response.text != null && response.text!.trim().isNotEmpty) {
+          return response.text!.trim();
+        }
       }
       return 'KHÔNG ĐỌC ĐƯỢC';
     } catch (e) {
@@ -71,11 +87,6 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
     }
 
     try {
-      final model = GenerativeModel(
-        model: 'gemini-2.5-flash',
-        apiKey: _apiKey,
-      );
-
       // Tải ảnh từ URL thành bytes
       final dio = Dio();
       final responseHttp = await dio.get(
@@ -94,12 +105,33 @@ If the image is blurry or has no valid name, return 'KHÔNG ĐỌC ĐƯỢC'.
       
       final imagePart = DataPart('image/jpeg', bytes);
 
-      final response = await model.generateContent([
-        Content.multi([prompt, imagePart])
-      ]);
+      // Thử model mới nhất trước (gemini-2.5-flash)
+      try {
+        debugPrint('AI Service: Đang thử với gemini-2.5-flash...');
+        final model = GenerativeModel(
+          model: 'gemini-2.5-flash',
+          apiKey: _apiKey,
+        );
+        final response = await model.generateContent([
+          Content.multi([prompt, imagePart])
+        ]);
 
-      if (response.text != null && response.text!.trim().isNotEmpty) {
-        return response.text!.trim();
+        if (response.text != null && response.text!.trim().isNotEmpty) {
+          return response.text!.trim();
+        }
+      } catch (e) {
+        debugPrint('Lỗi khi gọi model gemini-2.5-flash: $e. Đang thử lại với model dự phòng gemini-1.5-flash...');
+        final modelFallback = GenerativeModel(
+          model: 'gemini-1.5-flash',
+          apiKey: _apiKey,
+        );
+        final response = await modelFallback.generateContent([
+          Content.multi([prompt, imagePart])
+        ]);
+
+        if (response.text != null && response.text!.trim().isNotEmpty) {
+          return response.text!.trim();
+        }
       }
       return 'KHÔNG ĐỌC ĐƯỢC';
     } catch (e) {

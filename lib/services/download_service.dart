@@ -39,11 +39,28 @@ class DownloadService {
         }
       } catch (_) {}
 
+      // Dynamic domain replacement to bypass ISP blocking
+      String downloadUrl = url;
+      if (downloadUrl.contains('pixeldrain.com')) {
+        downloadUrl = downloadUrl.replaceAll('pixeldrain.com', 'pixeldrain.net');
+      }
+
       // Download image to a temporary file
       final tempDir = await getTemporaryDirectory();
       final tempPath = '${tempDir.path}/temp_download_${DateTime.now().millisecondsSinceEpoch}$extension';
 
-      await _dio.download(url, tempPath);
+      await _dio.download(
+        downloadUrl,
+        tempPath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            final percent = (received / total * 100).toStringAsFixed(0);
+            onStatusChanged('Đang tải ảnh: $percent%');
+          } else {
+            onStatusChanged('Đang tải ảnh (${(received / 1024).toStringAsFixed(0)} KB)...');
+          }
+        },
+      );
 
       // Save the file to gallery
       final result = await ImageGallerySaver.saveFile(tempPath);

@@ -1,10 +1,11 @@
 import 'dart:math';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 
 
 class StorageService {
@@ -21,15 +22,38 @@ class StorageService {
   ];
 
   Future<String> uploadOriginalImage(XFile file, String path) async {
+    XFile fileToUpload = file;
+    try {
+      final sizeBytes = await file.length();
+      if (sizeBytes > 300 * 1024) {
+        debugPrint('Compressing large image of size: ${(sizeBytes / 1024).toStringAsFixed(2)} KB');
+        final tempDir = await getTemporaryDirectory();
+        final outPath = '${tempDir.path}/comp_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final compressed = await FlutterImageCompress.compressAndGetFile(
+          file.path,
+          outPath,
+          quality: 80,
+          format: CompressFormat.jpeg,
+        );
+        if (compressed != null) {
+          fileToUpload = compressed;
+          final newSize = await fileToUpload.length();
+          debugPrint('Compressed size: ${(newSize / 1024).toStringAsFixed(2)} KB');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error compressing image during upload: $e');
+    }
+
     if (useFirebase) {
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
-        final data = await file.readAsBytes();
+        final data = await fileToUpload.readAsBytes();
         final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 30));
         return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 30));
       } catch (e) {
         debugPrint('Firebase Storage error: $e, falling back to Pixeldrain');
-        return await _fallbackUpload(file);
+        return await _fallbackUpload(fileToUpload);
       }
     } else {
       await Future.delayed(const Duration(seconds: 1));
@@ -39,17 +63,36 @@ class StorageService {
   }
 
   Future<String> uploadThumbnail(XFile file, String path) async {
+    XFile fileToUpload = file;
+    try {
+      final sizeBytes = await file.length();
+      if (sizeBytes > 300 * 1024) {
+        debugPrint('Compressing thumbnail image of size: ${(sizeBytes / 1024).toStringAsFixed(2)} KB');
+        final tempDir = await getTemporaryDirectory();
+        final outPath = '${tempDir.path}/comp_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final compressed = await FlutterImageCompress.compressAndGetFile(
+          file.path,
+          outPath,
+          quality: 80,
+          format: CompressFormat.jpeg,
+        );
+        if (compressed != null) {
+          fileToUpload = compressed;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error compressing thumbnail: $e');
+    }
+
     if (useFirebase) {
-      // Typically you'd compress `file` here using flutter_image_compress
-      // before uploading to the thumbnail path.
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
-        final data = await file.readAsBytes();
+        final data = await fileToUpload.readAsBytes();
         final uploadTask = await ref.putData(data).timeout(const Duration(seconds: 30));
         return await uploadTask.ref.getDownloadURL().timeout(const Duration(seconds: 30));
       } catch (e) {
         debugPrint('Firebase Storage error: $e, falling back to Pixeldrain');
-        return await _fallbackUpload(file);
+        return await _fallbackUpload(fileToUpload);
       }
     } else {
       await Future.delayed(const Duration(milliseconds: 500));
@@ -185,11 +228,11 @@ class StorageService {
         filename: file.name.isNotEmpty ? file.name : 'image.jpg',
       ),
     });
-    final response = await dio.post('https://pixeldrain.com/api/file', data: formData);
+    final response = await dio.post('https://pixeldrain.net/api/file', data: formData);
     if (response.statusCode == 200 || response.statusCode == 201) {
       final data = response.data;
       if (data is Map && data['id'] != null) {
-        return 'https://pixeldrain.com/api/file/${data['id']}';
+        return 'https://pixeldrain.net/api/file/${data['id']}';
       }
     }
     throw Exception('Pixeldrain upload response invalid');

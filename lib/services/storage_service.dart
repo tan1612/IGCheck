@@ -1,14 +1,10 @@
 import 'dart:math';
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 
 
 class StorageService {
@@ -76,52 +72,6 @@ class StorageService {
     }
   }
 
-  Future<XFile> _compressOriginalImage(XFile file) async {
-    if (kIsWeb) return file;
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final targetPath = p.join(tempDir.path, 'compressed_orig_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      
-      final result = await FlutterImageCompress.compressAndGetFile(
-        file.path,
-        targetPath,
-        quality: 80,
-        minWidth: 1024,
-        minHeight: 1024,
-      );
-      
-      if (result != null) {
-        return XFile(result.path);
-      }
-    } catch (e) {
-      debugPrint('Error compressing original image: $e');
-    }
-    return file;
-  }
-
-  Future<XFile> _compressThumbnailImage(XFile file) async {
-    if (kIsWeb) return file;
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final targetPath = p.join(tempDir.path, 'compressed_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      
-      final result = await FlutterImageCompress.compressAndGetFile(
-        file.path,
-        targetPath,
-        quality: 60,
-        minWidth: 320,
-        minHeight: 320,
-      );
-      
-      if (result != null) {
-        return XFile(result.path);
-      }
-    } catch (e) {
-      debugPrint('Error compressing thumbnail image: $e');
-    }
-    return file;
-  }
-
   Future<Map<String, String>> replaceImageSafely({
     required XFile newFile,
     required String oldOriginalPath,
@@ -136,44 +86,18 @@ class StorageService {
     }
 
     final origPath = '$newBasePath/original.jpg';
-    final thumbPath = '$newBasePath/thumbnail.jpg';
 
-    // Compress original and thumbnail images
-    final compressedOriginal = await _compressOriginalImage(newFile);
-    final compressedThumbnail = await _compressThumbnailImage(newFile);
+    // Upload original image directly as is (retaining 100% quality)
+    final origUrl = await uploadOriginalImage(newFile, origPath);
+    
+    // Reuse original URL and path for thumbnail to avoid double upload and compression
+    final thumbUrl = origUrl;
+    final thumbPath = origPath;
 
-    final origUrl = await uploadOriginalImage(compressedOriginal, origPath);
-    final thumbUrl = await uploadThumbnail(compressedThumbnail, thumbPath);
-
-    // Clean up temporary compressed files
-    try {
-      if (!kIsWeb) {
-        if (compressedOriginal.path != newFile.path) {
-          final file = File(compressedOriginal.path);
-          if (await file.exists()) await file.delete();
-        }
-        if (compressedThumbnail.path != newFile.path) {
-          final file = File(compressedThumbnail.path);
-          if (await file.exists()) await file.delete();
-        }
-      }
-    } catch (e) {
-      debugPrint('Error deleting temporary compressed files: $e');
-    }
-
-    // Determine final compressed size
     int finalSizeBytes = 0;
     try {
-      if (!kIsWeb) {
-        finalSizeBytes = await File(compressedOriginal.path).length();
-      } else {
-        finalSizeBytes = await newFile.length();
-      }
-    } catch (_) {
-      try {
-        finalSizeBytes = await newFile.length();
-      } catch (_) {}
-    }
+      finalSizeBytes = await newFile.length();
+    } catch (_) {}
 
     return {
       'originalImageUrl': origUrl,

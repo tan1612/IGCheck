@@ -504,9 +504,32 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                             ],
                                           ),
                                           const SizedBox(height: 4),
-                                          Text(
-                                            '- Họ tên trên giấy tờ: $_aiExtractedName',
-                                            style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w500),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  '- Họ tên trên giấy tờ: $_aiExtractedName',
+                                                  style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w500),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              GestureDetector(
+                                                onTap: () {
+                                                  Clipboard.setData(ClipboardData(text: _aiExtractedName!));
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('Đã sao chép họ tên từ kết quả quét AI.'),
+                                                      duration: Duration(seconds: 1),
+                                                    ),
+                                                  );
+                                                },
+                                                child: Icon(
+                                                  Icons.copy_rounded,
+                                                  size: 18,
+                                                  color: Colors.green.shade700,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),

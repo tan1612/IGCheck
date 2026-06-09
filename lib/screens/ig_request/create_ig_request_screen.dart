@@ -526,6 +526,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       String thumbnailImageUrl = '';
       String originalImagePath = '';
       String thumbnailImagePath = '';
+      int finalSizeBytes = 0;
       if (_selectedFile != null) {
         final storageService = StorageService();
         final pathBase = 'ig_requests/${user.pairId!}/$mockId';
@@ -540,6 +541,11 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         thumbnailImageUrl = urls['thumbnailImageUrl'] ?? '';
         originalImagePath = urls['originalImagePath'] ?? '';
         thumbnailImagePath = urls['thumbnailImagePath'] ?? '';
+        if (urls.containsKey('imageSizeBytes')) {
+          finalSizeBytes = int.tryParse(urls['imageSizeBytes']!) ?? finalSizeBytes;
+        } else {
+          finalSizeBytes = (_imageSize * 1024 * 1024).toInt();
+        }
       }
 
       // Save request doc to Firestore
@@ -553,7 +559,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         thumbnailImageUrl: thumbnailImageUrl,
         originalImagePath: originalImagePath,
         thumbnailImagePath: thumbnailImagePath,
-        imageSizeBytes: _selectedFile != null ? (_imageSize * 1024 * 1024).toInt() : 0,
+        imageSizeBytes: finalSizeBytes,
         senderId: user.uid,
         receiverId: user.partnerId!,
         pairId: user.pairId!,

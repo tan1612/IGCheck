@@ -144,7 +144,11 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
         );
         newImageUrl = urls['originalImageUrl'];
         newThumbnailImageUrl = urls['thumbnailImageUrl'];
-        newImageSizeBytes = (_imageSize * 1024 * 1024).toInt();
+        if (urls.containsKey('imageSizeBytes')) {
+          newImageSizeBytes = int.tryParse(urls['imageSizeBytes']!) ?? (_imageSize * 1024 * 1024).toInt();
+        } else {
+          newImageSizeBytes = (_imageSize * 1024 * 1024).toInt();
+        }
       }
 
       await firestoreService.updateRequest(

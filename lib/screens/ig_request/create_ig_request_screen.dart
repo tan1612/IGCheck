@@ -41,6 +41,9 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
   bool _isScanning = false;
   final ImagePicker _picker = ImagePicker();
 
+  String? _importedNotepadAlias;
+  String? _importedUsername;
+
   @override
   void dispose() {
     _usernameController.dispose();
@@ -160,6 +163,8 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
           _twoFactorKeyController.text = acc['twoFactorKey']!;
           _quickImportController.clear();
           _currentOtp = ''; // reset OTP
+          _importedNotepadAlias = alias;
+          _importedUsername = acc['username']!;
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -288,6 +293,140 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     }
   }
 
+  Future<void> _confirmAndDeleteSpecificAccountFromNotepad() async {
+    final alias = _importedNotepadAlias;
+    final username = _importedUsername;
+    if (alias == null || username == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận xóa tài khoản'),
+        content: Text('Bạn có chắc chắn muốn xóa tài khoản $username khỏi Notepad (note.2fa.live/$alias) không? Hành động này không thể hoàn tác.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _deleteSpecificAccountFromNotepad();
+            },
+            child: const Text('Xóa', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteSpecificAccountFromNotepad() async {
+    final alias = _importedNotepadAlias;
+    final username = _importedUsername;
+    if (alias == null || alias.isEmpty || username == null || username.isEmpty) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: Colors.red),
+            SizedBox(width: 20),
+            Expanded(child: Text('Đang xóa tài khoản khỏi Notepad...')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final dio = Dio();
+      dio.options.connectTimeout = const Duration(seconds: 10);
+      final response = await dio.get('https://note.2fa.live/note/$alias');
+      
+      final data = response.data;
+      String? rawContent;
+      if (data is Map) {
+        rawContent = data['r']?.toString();
+      } else if (data is String) {
+        final decoded = json.decode(data);
+        rawContent = decoded['r']?.toString();
+      }
+
+      if (rawContent == null) {
+        throw Exception('Không thể lấy nội dung từ Notepad.');
+      }
+
+      final lines = rawContent.split('\n');
+      final updatedLines = <String>[];
+      bool found = false;
+
+      for (var line in lines) {
+        final trimmedLine = line.trim();
+        if (trimmedLine.isEmpty) {
+          updatedLines.add(line);
+          continue;
+        }
+        final parts = trimmedLine.split('|');
+        if (parts.isNotEmpty) {
+          final noteUsername = parts[0].trim();
+          final cleanNote = noteUsername.replaceAll('@', '').toLowerCase();
+          final cleanTarget = username.replaceAll('@', '').toLowerCase();
+          if (cleanNote == cleanTarget) {
+            found = true;
+            continue; // Bỏ qua dòng này (xóa nó)
+          }
+        }
+        updatedLines.add(line);
+      }
+
+      if (!found) {
+        throw Exception('Không tìm thấy tài khoản $username trên Notepad.');
+      }
+
+      final newContent = updatedLines.join('\n');
+
+      final postResponse = await dio.post(
+        'https://note.2fa.live/note/$alias',
+        data: {'content': newContent},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Đóng dialog loading
+      }
+
+      if (postResponse.statusCode == 200) {
+        setState(() {
+          _usernameController.clear();
+          _passwordController.clear();
+          _twoFactorKeyController.clear();
+          _currentOtp = '';
+          _importedNotepadAlias = null;
+          _importedUsername = null;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Đã xóa tài khoản $username khỏi Notepad thành công!')),
+          );
+        }
+      } else {
+        throw Exception('Không thể lưu nội dung mới lên Notepad.');
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Đóng dialog loading
+      }
+      debugPrint('Lỗi xóa tài khoản khỏi Notepad: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi xóa tài khoản: ${e.toString().replaceAll('Exception: ', '')}')),
+        );
+      }
+    }
+  }
+
   void _showAccountSelectionBottomSheet(List<Map<String, String>> accounts, String alias) {
     showModalBottomSheet(
       context: context,
@@ -329,6 +468,8 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                           _twoFactorKeyController.text = acc['twoFactorKey']!;
                           _quickImportController.clear();
                           _currentOtp = ''; // reset OTP
+                          _importedNotepadAlias = alias;
+                          _importedUsername = acc['username']!;
                         });
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -737,6 +878,9 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                               _usernameController.clear();
                               _passwordController.clear();
                               _twoFactorKeyController.clear();
+                              _importedNotepadAlias = null;
+                              _importedUsername = null;
+                              _currentOtp = '';
                             });
                           },
                           child: Container(
@@ -776,6 +920,9 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                               _usernameController.clear();
                               _passwordController.clear();
                               _twoFactorKeyController.clear();
+                              _importedNotepadAlias = null;
+                              _importedUsername = null;
+                              _currentOtp = '';
                             });
                           },
                           child: Container(
@@ -997,6 +1144,39 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                     ),
                   ),
                 ],
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _usernameController,
+                  builder: (context, usernameVal, child) {
+                    final currentUsername = usernameVal.text.trim();
+                    if (_importedNotepadAlias != null &&
+                        _importedUsername != null &&
+                        currentUsername.toLowerCase() == _importedUsername!.toLowerCase()) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.delete_forever_outlined, size: 18),
+                            label: Text(
+                              'Xóa tài khoản này khỏi note.2fa.live/$_importedNotepadAlias',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: _confirmAndDeleteSpecificAccountFromNotepad,
+                          ),
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
                 const SizedBox(height: 16),
                 AppTextField(
                   controller: _displayNameController,

@@ -97,7 +97,7 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
 
     // Check duplicate display name (excluding current request)
     final targetName = _displayNameController.text.trim();
-    if (targetName.isNotEmpty && user.pairId != null) {
+    if (targetName.isNotEmpty && user.pairId != null && user.pairId!.isNotEmpty) {
       final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
       if (!mounted) return;
       final alreadyExists = existingRequests.any((r) => 
@@ -292,7 +292,7 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
         final firestoreService = Provider.of<FirestoreService>(context, listen: false);
         final user = authService.currentUser;
         final request = ModalRoute.of(context)!.settings.arguments as IGRequestModel;
-        if (user != null && user.pairId != null) {
+        if (user != null && user.pairId != null && user.pairId!.isNotEmpty) {
           final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
           if (!mounted) return;
           final normalizedResultName = resultName.trim().toLowerCase();

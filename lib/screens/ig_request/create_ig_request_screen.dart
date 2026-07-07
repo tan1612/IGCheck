@@ -83,6 +83,22 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       return;
     }
 
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser;
+    if (user == null || 
+        user.partnerId == null || 
+        user.partnerId!.isEmpty || 
+        user.pairId == null || 
+        user.pairId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bạn cần ghép đôi tài khoản trước khi thực hiện chức năng này.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -137,7 +153,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         };
       }).toList();
 
-      if (filterDuplicates && user != null && user.pairId != null) {
+      if (filterDuplicates && user != null && user.pairId != null && user.pairId!.isNotEmpty) {
         final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
         final existingUsernames = existingRequests.map((r) {
           final username = r.instagramUsername;
@@ -518,7 +534,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         final authService = Provider.of<AuthService>(context, listen: false);
         final firestoreService = Provider.of<FirestoreService>(context, listen: false);
         final user = authService.currentUser;
-        if (user != null && user.pairId != null) {
+        if (user != null && user.pairId != null && user.pairId!.isNotEmpty) {
           final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
           if (!mounted) return;
           final normalizedResultName = resultName.trim().toLowerCase();
@@ -608,7 +624,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     final notifService = Provider.of<NotificationService>(context, listen: false);
 
     final user = authService.currentUser;
-    if (user == null || user.partnerId == null || user.pairId == null) {
+    if (user == null || user.partnerId == null || user.partnerId!.isEmpty || user.pairId == null || user.pairId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tài khoản chưa được ghép đôi.')),
       );
@@ -636,7 +652,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
 
     // 2. Check duplicate display name
     final targetName = _displayNameController.text.trim();
-    if (targetName.isNotEmpty) {
+    if (targetName.isNotEmpty && user.pairId != null && user.pairId!.isNotEmpty) {
       final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
       if (!mounted) return;
       final alreadyExists = existingRequests.any((r) => r.displayName.trim().toLowerCase() == targetName.toLowerCase());

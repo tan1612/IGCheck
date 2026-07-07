@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/ig_request_model.dart';
@@ -19,6 +20,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
+  Timer? _verificationTimer;
 
   @override
   void initState() {
@@ -48,7 +50,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Navigator.pushNamed(context, '/ig_request_detail', arguments: match);
         }
       });
+
+      // Start periodic and immediate verified badge tracker
+      _scanUnverifiedRequests();
+      _startVerifiedBadgeTracker();
     });
+  }
+
+  @override
+  void dispose() {
+    _verificationTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startVerifiedBadgeTracker() {
+    _verificationTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      _scanUnverifiedRequests();
+    });
+  }
+
+  Future<void> _scanUnverifiedRequests() async {
+    if (!mounted) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final notifService = Provider.of<NotificationService>(context, listen: false);
+
+    final user = authService.currentUser;
+    if (user == null || user.pairId == null || user.pairId!.isEmpty) return;
+
+    try {
+      final requests = await firestoreService.getRequestsByPairId(user.pairId!);
+      final unverifiedRequests = requests.where((r) => !r.isVerified && r.status != 'cancelled').toList();
+
+      for (final req in unverifiedRequests) {
+        final isNowVerified = await notifService.checkVerificationStatus(req.accountType, req.instagramUsername);
+        if (isNowVerified) {
+          await firestoreService.updateRequest(
+            requestId: req.id,
+            instagramUsername: req.instagramUsername,
+            displayName: req.displayName,
+            note: req.note,
+            password: req.password,
+            twoFactorKey: req.twoFactorKey,
+            senderId: req.senderId,
+            receiverId: req.receiverId,
+            pairId: req.pairId,
+            lastAction: 'updated_verified',
+            isVerified: true,
+          );
+
+          final partner = authService.getUserById(user.partnerId ?? '');
+          final serviceLabel = req.accountType == 'instagram' ? 'Instagram' : 'Facebook';
+          final textMsg = '🎉 <b>TÀI KHOẢN ĐẠT TÍCH XANH!</b> 🎉\n'
+              'Tài khoản $serviceLabel <code>${req.instagramUsername}</code> vừa được hệ thống phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!';
+
+          if (partner != null && partner.telegramChatId != null && partner.telegramChatId!.isNotEmpty) {
+            await notifService.sendTelegramMessage(textMsg, targetChatId: partner.telegramChatId);
+          }
+          if (user.telegramChatId != null && user.telegramChatId!.isNotEmpty) {
+            await notifService.sendTelegramMessage(textMsg, targetChatId: user.telegramChatId);
+          }
+
+          if (mounted) {
+            notifService.simulateIncomingNotification(
+              context,
+              '🎉 TÍCH XANH THÀNH CÔNG! 🎉',
+              'Tài khoản ${req.instagramUsername} đã lên tích xanh!',
+              req.id,
+            );
+          }
+        }
+        await Future.delayed(const Duration(seconds: 2));
+      }
+    } catch (e) {
+      debugPrint('Lỗi khi quét tích xanh tự động: $e');
+    }
   }
 
   // Sub-screens list

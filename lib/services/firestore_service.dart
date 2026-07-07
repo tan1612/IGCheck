@@ -260,6 +260,7 @@ class FirestoreService extends ChangeNotifier {
     required String receiverId,
     required String pairId,
     String accountType = 'instagram',
+    bool isVerified = false,
   }) async {
     final newReq = IGRequestModel(
       id: 'req_${DateTime.now().millisecondsSinceEpoch}',
@@ -283,6 +284,7 @@ class FirestoreService extends ChangeNotifier {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       accountType: accountType,
+      isVerified: isVerified,
     );
 
     if (useFirebase) {
@@ -311,6 +313,7 @@ class FirestoreService extends ChangeNotifier {
     required String pairId,
     required String lastAction,
     String? accountType,
+    bool? isVerified,
   }) async {
     if (useFirebase) {
       final docRef = FirebaseFirestore.instance.collection('requests').doc(requestId);
@@ -329,6 +332,7 @@ class FirestoreService extends ChangeNotifier {
       if (thumbnailImageUrl != null) updateData['thumbnailImageUrl'] = thumbnailImageUrl;
       if (imageSizeBytes != null) updateData['imageSizeBytes'] = imageSizeBytes;
       if (accountType != null) updateData['accountType'] = accountType;
+      if (isVerified != null) updateData['isVerified'] = isVerified;
 
       await docRef.update(updateData);
     } else {
@@ -350,6 +354,7 @@ class FirestoreService extends ChangeNotifier {
         lastAction: lastAction,
         updatedAt: DateTime.now(),
         accountType: accountType ?? existing.accountType,
+        isVerified: isVerified ?? existing.isVerified,
       );
 
       _requests[index] = updated;

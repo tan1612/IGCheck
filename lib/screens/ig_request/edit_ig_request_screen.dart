@@ -151,6 +151,8 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
         }
       }
 
+      final isVerified = await notifService.checkVerificationStatus(request.accountType, normalizedUsername);
+
       await firestoreService.updateRequest(
         requestId: request.id,
         instagramUsername: normalizedUsername,
@@ -166,6 +168,7 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
         pairId: user.pairId!,
         lastAction: 'resubmitted',
         accountType: request.accountType,
+        isVerified: isVerified,
       );
 
       if (mounted) {
@@ -175,16 +178,30 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
         final partner = authService.getUserById(user.partnerId!);
         if (partner != null) {
           final serviceLabel = request.accountType == 'instagram' ? 'Instagram' : 'Facebook';
+          
+          final pushTitle = isVerified
+              ? '🌟 Cập nhật hồ sơ $serviceLabel TÍCH XANH!'
+              : 'Đã cập nhật lại hồ sơ $serviceLabel';
+              
+          final pushBody = isVerified
+              ? '${user.name} vừa gửi lại bản cập nhật TÍCH XANH cho $normalizedUsername'
+              : '${user.name} vừa gửi lại bản cập nhật cho $normalizedUsername';
+
           notifService.simulateIncomingNotification(
             context,
-            'Đã cập nhật lại hồ sơ $serviceLabel',
-            '${user.name} vừa gửi lại bản cập nhật cho $normalizedUsername',
+            pushTitle,
+            pushBody,
             request.id,
           );
           
+          final telegramMsg = isVerified
+              ? '🌟 <b>CẬP NHẬT HỒ SƠ TÍCH XANH</b> 🌟\n'
+                '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel có <b>TÍCH XANH (Verified Badge)</b> cho <code>$normalizedUsername</code>.'
+              : '🔔 <b>Cập nhật hồ sơ</b>\n'
+                '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel cho <code>$normalizedUsername</code>.';
+
           notifService.sendTelegramMessage(
-            '🔔 <b>Cập nhật hồ sơ</b>\n'
-            '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel cho <code>$normalizedUsername</code>.',
+            telegramMsg,
             targetChatId: partner.telegramChatId,
           );
         }

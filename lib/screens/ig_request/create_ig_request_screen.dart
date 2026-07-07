@@ -712,6 +712,10 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       }
 
       // Save request doc to Firestore
+      // Check verified badge
+      final isVerified = await notifService.checkVerificationStatus(_accountType, normalizedUsername);
+
+      // Save request doc to Firestore
       await firestoreService.createRequest(
         instagramUsername: normalizedUsername,
         displayName: _displayNameController.text.trim(),
@@ -727,6 +731,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         receiverId: user.partnerId!,
         pairId: user.pairId!,
         accountType: _accountType,
+        isVerified: isVerified,
       );
 
       if (mounted) {
@@ -740,16 +745,29 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
               ? Validators.normalizeInstagramUsername(_usernameController.text)
               : _usernameController.text.trim();
 
+          final pushTitle = isVerified 
+              ? '🌟 Hồ sơ $serviceLabel TÍCH XANH mới!'
+              : 'Hồ sơ $serviceLabel mới cần check';
+          
+          final pushBody = isVerified
+              ? '${user.name} vừa gửi một yêu cầu check TÍCH XANH cho $normalizedUsername'
+              : '${user.name} vừa gửi một yêu cầu check cho $normalizedUsername';
+
           notifService.simulateIncomingNotification(
             context,
-            'Hồ sơ $serviceLabel mới cần check',
-            '${user.name} vừa gửi một yêu cầu check cho $normalizedUsername',
+            pushTitle,
+            pushBody,
             mockId,
           );
           
+          final telegramMsg = isVerified
+              ? '🌟 <b>HỒ SƠ TÍCH XANH MỚI</b> 🌟\n'
+                '${user.name} vừa gửi một yêu cầu check $serviceLabel có <b>TÍCH XANH (Verified Badge)</b> cho <code>$normalizedUsername</code>.'
+              : '🔔 <b>Yêu cầu mới</b>\n'
+                '${user.name} vừa gửi một yêu cầu check $serviceLabel cho <code>$normalizedUsername</code>.';
+
           notifService.sendTelegramMessage(
-            '🔔 <b>Yêu cầu mới</b>\n'
-            '${user.name} vừa gửi một yêu cầu check $serviceLabel cho <code>$normalizedUsername</code>.',
+            telegramMsg,
             targetChatId: partner.telegramChatId,
           );
         }

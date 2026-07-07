@@ -178,4 +178,60 @@ class NotificationService extends ChangeNotifier {
       ),
     );
   }
+
+  /// Kiểm tra tài khoản có tích xanh hay không (Instagram hoặc Facebook)
+  Future<bool> checkVerificationStatus(String accountType, String usernameOrUid) async {
+    if (usernameOrUid.isEmpty) return false;
+    
+    try {
+      final dio = Dio();
+      dio.options.connectTimeout = const Duration(seconds: 10);
+      dio.options.receiveTimeout = const Duration(seconds: 10);
+      dio.options.validateStatus = (status) => status != null && status < 500;
+      
+      final headers = {
+        'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      };
+      
+      String url = '';
+      if (accountType.toLowerCase() == 'instagram') {
+        final cleanUsername = usernameOrUid.startsWith('@') 
+            ? usernameOrUid.substring(1).trim() 
+            : usernameOrUid.trim();
+        url = 'https://www.instagram.com/$cleanUsername/';
+      } else {
+        url = 'https://www.facebook.com/${usernameOrUid.trim()}/';
+      }
+      
+      final response = await dio.get(
+        url,
+        options: Options(headers: headers, followRedirects: true, maxRedirects: 3),
+      );
+      
+      final html = response.data?.toString() ?? '';
+      
+      // Regex check for verified badge in HTML
+      // 1. "is_verified":true or "verified":true
+      final isVerifiedRegex = RegExp(r'"is_verified"\s*:\s*true');
+      final verifiedRegex = RegExp(r'"verified"\s*:\s*true');
+      
+      if (isVerifiedRegex.hasMatch(html) || verifiedRegex.hasMatch(html)) {
+        return true;
+      }
+      
+      // 2. Facebook verified page indicators
+      if (accountType.toLowerCase() == 'facebook') {
+        if (html.contains('verification_status') && html.contains('blue_verified')) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('Lỗi kiểm tra tích xanh cho $usernameOrUid ($accountType): $e');
+      return false;
+    }
+  }
 }

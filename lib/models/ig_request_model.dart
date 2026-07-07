@@ -24,6 +24,7 @@ class IGRequestModel {
   final DateTime? reviewedAt;
   final String accountType; // 'instagram' or 'facebook'
   final int rejectionCount; // Number of times rejected
+  final bool isVerified; // Check if user has verification badge (blue checkmark)
 
   IGRequestModel({
     required this.id,
@@ -49,6 +50,7 @@ class IGRequestModel {
     this.reviewedAt,
     this.accountType = 'instagram',
     this.rejectionCount = 0,
+    this.isVerified = false,
   });
 
   IGRequestModel copyWith({
@@ -75,6 +77,7 @@ class IGRequestModel {
     DateTime? reviewedAt,
     String? accountType,
     int? rejectionCount,
+    bool? isVerified,
   }) {
     return IGRequestModel(
       id: id ?? this.id,
@@ -100,6 +103,7 @@ class IGRequestModel {
       reviewedAt: reviewedAt ?? this.reviewedAt,
       accountType: accountType ?? this.accountType,
       rejectionCount: rejectionCount ?? this.rejectionCount,
+      isVerified: isVerified ?? this.isVerified,
     );
   }
 
@@ -128,6 +132,7 @@ class IGRequestModel {
       reviewedAt: _parseDate(json['reviewedAt']),
       accountType: json['accountType'] as String? ?? 'instagram',
       rejectionCount: _parseInt(json['rejectionCount']),
+      isVerified: json['isVerified'] as bool? ?? false,
     );
   }
 
@@ -171,6 +176,7 @@ class IGRequestModel {
       'reviewedAt': reviewedAt != null ? Timestamp.fromDate(reviewedAt!) : null,
       'accountType': accountType,
       'rejectionCount': rejectionCount,
+      'isVerified': isVerified,
     };
   }
 }

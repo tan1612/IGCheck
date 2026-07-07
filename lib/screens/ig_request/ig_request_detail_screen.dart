@@ -355,7 +355,20 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
               icon: const Icon(Icons.arrow_back_ios_new),
               onPressed: () => Navigator.pop(context),
             ),
-            title: Text(request.instagramUsername),
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(request.instagramUsername),
+                if (request.isVerified) ...[
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.verified,
+                    color: Colors.blue,
+                    size: 18,
+                  ),
+                ],
+              ],
+            ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.share_outlined),
@@ -404,6 +417,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                             isInstagram ? 'Tài khoản IG' : 'UID Facebook', 
                             request.instagramUsername,
                             copyable: true,
+                            showVerifiedBadge: request.isVerified,
                           ),
                           if (request.displayName.isNotEmpty)
                             _buildInfoRow('Tên hiển thị', request.displayName, copyable: true),
@@ -802,7 +816,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, {bool copyable = false}) {
+  Widget _buildInfoRow(String label, String value, {bool copyable = false, bool showVerifiedBadge = false}) {
     return Builder(
       builder: (context) {
         return Padding(
@@ -820,12 +834,20 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
               Expanded(
                 child: Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         value,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1C1C1E)),
                       ),
                     ),
+                    if (showVerifiedBadge) ...[
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.verified,
+                        color: Colors.blue,
+                        size: 16,
+                      ),
+                    ],
                     if (copyable) ...[
                       const SizedBox(width: 8),
                       GestureDetector(

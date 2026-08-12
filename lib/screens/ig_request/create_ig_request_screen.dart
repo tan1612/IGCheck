@@ -13,6 +13,7 @@ import '../../services/storage_service.dart';
 import '../../services/ai_service.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
+import '../../models/user_model.dart';
 import '../../utils/validators.dart';
 import '../../utils/otp_helper.dart';
 import 'package:dio/dio.dart';
@@ -57,12 +58,22 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
 
   bool _isNotepadUrl(String val) {
     final clean = val.trim().toLowerCase();
-    return clean.contains('note.2fa.live');
+    return clean.contains('note.2fa.live') || clean.contains('2fa.live');
   }
 
-  String? _parseNotepadAlias(String url) {
+  String? _parseNotepadAlias(String input) {
+    final clean = input.trim();
+    if (clean.isEmpty) return null;
+
+    if (!clean.contains('/') && !clean.contains('.')) {
+      return clean;
+    }
+
     try {
-      final uri = Uri.parse(url.trim().startsWith('http') ? url.trim() : 'https://${url.trim()}');
+      final urlStr = clean.startsWith('http://') || clean.startsWith('https://') 
+          ? clean 
+          : 'https://$clean';
+      final uri = Uri.parse(urlStr);
       final pathSegments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
       if (pathSegments.isEmpty) return null;
       if (pathSegments.first == 'note' && pathSegments.length > 1) {
@@ -70,8 +81,131 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       }
       return pathSegments.first;
     } catch (_) {
-      return null;
+      return clean;
     }
+  }
+
+  String _getActiveNotepadUrl(UserModel? user, String accountType) {
+    if (accountType == 'instagram') {
+      final custom = user?.customIgNotepadUrl?.trim();
+      if (custom != null && custom.isNotEmpty) return custom;
+      return 'https://note.2fa.live/instagram';
+    } else {
+      final custom = user?.customFbNotepadUrl?.trim();
+      if (custom != null && custom.isNotEmpty) return custom;
+      return 'https://note.2fa.live/facebook';
+    }
+  }
+
+  String _getActiveNotepadDisplayLabel(UserModel? user, String accountType) {
+    final url = _getActiveNotepadUrl(user, accountType);
+    final alias = _parseNotepadAlias(url);
+    if (alias != null && alias.isNotEmpty) {
+      return 'note.2fa.live/$alias';
+    }
+    return url;
+  }
+
+  void _showNotepadConfigDialog(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser;
+
+    final igController = TextEditingController(
+      text: user?.customIgNotepadUrl ?? 'https://note.2fa.live/instagram',
+    );
+    final fbController = TextEditingController(
+      text: user?.customFbNotepadUrl ?? 'https://note.2fa.live/facebook',
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.edit_note_outlined, color: Colors.blueAccent),
+              SizedBox(width: 8),
+              Text('Cấu hình Link Note 2FA', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Nhập link hoặc Alias note.2fa.live để tự động tải danh sách tài khoản:',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: igController,
+                  decoration: InputDecoration(
+                    labelText: 'Link / Alias Note Instagram',
+                    hintText: 'Ví dụ: note.2fa.live/instagram hoặc cuong_ig',
+                    prefixIcon: const Icon(Icons.alternate_email, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: fbController,
+                  decoration: InputDecoration(
+                    labelText: 'Link / Alias Note Facebook',
+                    hintText: 'Ví dụ: note.2fa.live/facebook hoặc cuong_fb',
+                    prefixIcon: const Icon(Icons.facebook_outlined, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        igController.text = 'https://note.2fa.live/instagram';
+                        fbController.text = 'https://note.2fa.live/facebook';
+                      },
+                      icon: const Icon(Icons.restart_alt, size: 16),
+                      label: const Text('Mặc định', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newIg = igController.text.trim();
+                final newFb = fbController.text.trim();
+                authService.updateNotepadUrls(
+                  customIgNotepadUrl: newIg.isNotEmpty ? newIg : 'https://note.2fa.live/instagram',
+                  customFbNotepadUrl: newFb.isNotEmpty ? newFb : 'https://note.2fa.live/facebook',
+                );
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã cập nhật link Note 2FA thành công!')),
+                );
+
+                final activeUrl = _getActiveNotepadUrl(authService.currentUser, _accountType);
+                _importFromNotepad(activeUrl, filterDuplicates: true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Lưu & Nhập ngay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _importFromNotepad(String url, {bool filterDuplicates = false}) async {
@@ -920,61 +1054,86 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                   prefixIcon: Icons.bolt_outlined,
                   onChanged: _parseQuickImport,
                 ),
-                const SizedBox(height: 12),
-                Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        icon: Icon(
-                          _accountType == 'instagram' ? Icons.alternate_email : Icons.facebook_outlined,
-                          size: 18,
+                Builder(
+                  builder: (context) {
+                    final authService = Provider.of<AuthService>(context);
+                    final user = authService.currentUser;
+                    final activeLabel = _getActiveNotepadDisplayLabel(user, _accountType);
+
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: Icon(
+                                  _accountType == 'instagram' ? Icons.alternate_email : Icons.facebook_outlined,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  'Nhập từ $activeLabel',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: theme.primaryColor,
+                                  side: BorderSide(color: theme.primaryColor),
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  final url = _getActiveNotepadUrl(user, _accountType);
+                                  _importFromNotepad(url, filterDuplicates: true);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: 'Cấu hình link Note 2FA',
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: theme.primaryColor,
+                                  side: BorderSide(color: theme.primaryColor.withValues(alpha: 0.5)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: () => _showNotepadConfigDialog(context),
+                                child: const Icon(Icons.edit_note_outlined, size: 20),
+                              ),
+                            ),
+                          ],
                         ),
-                        label: Text(
-                          _accountType == 'instagram' 
-                              ? 'Nhập danh sách từ note.2fa.live/instagram' 
-                              : 'Nhập danh sách từ note.2fa.live/facebook',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: theme.primaryColor,
-                          side: BorderSide(color: theme.primaryColor),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          final url = _accountType == 'instagram' 
-                              ? 'https://note.2fa.live/instagram' 
-                              : 'https://note.2fa.live/facebook';
-                          _importFromNotepad(url, filterDuplicates: true);
-                        },
-                      ),
-                    ),
-                    if (_importedNotepadAlias != null && _importedUsername != null) ...[
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.delete_forever_outlined, size: 18),
-                          label: Text(
-                            'Xóa tài khoản $_importedUsername khỏi note.2fa.live/$_importedNotepadAlias',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        if (_importedNotepadAlias != null && _importedUsername != null) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.delete_forever_outlined, size: 18),
+                              label: Text(
+                                'Xóa tài khoản $_importedUsername khỏi note.2fa.live/$_importedNotepadAlias',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                side: const BorderSide(color: Colors.redAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: _confirmAndDeleteSpecificAccountFromNotepad,
                             ),
                           ),
-                          onPressed: _confirmAndDeleteSpecificAccountFromNotepad,
-                        ),
-                      ),
-                    ],
-                  ],
+                        ],
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 const Divider(),

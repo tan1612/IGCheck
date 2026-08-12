@@ -7,6 +7,8 @@ class UserModel {
   final String? pairId;
   final String? fcmToken;
   final String? telegramChatId;
+  final String? customIgNotepadUrl;
+  final String? customFbNotepadUrl;
   final DateTime? lastSeenAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -20,6 +22,8 @@ class UserModel {
     this.pairId,
     this.fcmToken,
     this.telegramChatId,
+    this.customIgNotepadUrl,
+    this.customFbNotepadUrl,
     this.lastSeenAt,
     this.createdAt,
     this.updatedAt,
@@ -34,6 +38,8 @@ class UserModel {
     String? pairId,
     String? fcmToken,
     String? telegramChatId,
+    String? customIgNotepadUrl,
+    String? customFbNotepadUrl,
     DateTime? lastSeenAt,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -47,6 +53,8 @@ class UserModel {
       pairId: pairId ?? this.pairId,
       fcmToken: fcmToken ?? this.fcmToken,
       telegramChatId: telegramChatId ?? this.telegramChatId,
+      customIgNotepadUrl: customIgNotepadUrl ?? this.customIgNotepadUrl,
+      customFbNotepadUrl: customFbNotepadUrl ?? this.customFbNotepadUrl,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -63,6 +71,8 @@ class UserModel {
       pairId: null,
       fcmToken: fcmToken,
       telegramChatId: telegramChatId,
+      customIgNotepadUrl: customIgNotepadUrl,
+      customFbNotepadUrl: customFbNotepadUrl,
       lastSeenAt: lastSeenAt,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
@@ -79,6 +89,8 @@ class UserModel {
       pairId: json['pairId'] as String?,
       fcmToken: json['fcmToken'] as String?,
       telegramChatId: json['telegramChatId'] as String?,
+      customIgNotepadUrl: json['customIgNotepadUrl'] as String?,
+      customFbNotepadUrl: json['customFbNotepadUrl'] as String?,
       lastSeenAt: _parseDate(json['lastSeenAt']),
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
@@ -107,6 +119,8 @@ class UserModel {
       'pairId': pairId,
       'fcmToken': fcmToken,
       'telegramChatId': telegramChatId,
+      'customIgNotepadUrl': customIgNotepadUrl,
+      'customFbNotepadUrl': customFbNotepadUrl,
       'lastSeenAt': lastSeenAt?.toIso8601String(),
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),

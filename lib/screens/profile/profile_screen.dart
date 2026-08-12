@@ -476,6 +476,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Navigator.pushNamed(context, '/cookie_facebook_tool');
                           },
                         ),
+                        const Divider(height: 12),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.edit_note_outlined,
+                              color: Colors.blueAccent,
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Cấu hình Link Note 2FA',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1C1C1E),
+                            ),
+                          ),
+                          subtitle: Text(
+                            'IG: ${user?.customIgNotepadUrl ?? "note.2fa.live/instagram"} | FB: ${user?.customFbNotepadUrl ?? "note.2fa.live/facebook"}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF8E8E93),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFFC7C7CC),
+                          ),
+                          onTap: () => _showNotepadConfigDialog(context),
+                        ),
                       ],
                     ),
                   ),
@@ -611,6 +649,105 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showNotepadConfigDialog(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser;
+
+    final igController = TextEditingController(
+      text: user?.customIgNotepadUrl ?? 'https://note.2fa.live/instagram',
+    );
+    final fbController = TextEditingController(
+      text: user?.customFbNotepadUrl ?? 'https://note.2fa.live/facebook',
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.edit_note_outlined, color: Colors.blueAccent),
+              SizedBox(width: 8),
+              Text('Cấu hình Link Note 2FA', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Nhập link hoặc Alias note.2fa.live mặc định để tự động lấy danh sách tài khoản:',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: igController,
+                  decoration: InputDecoration(
+                    labelText: 'Link / Alias Note Instagram',
+                    hintText: 'Ví dụ: note.2fa.live/instagram hoặc cuong_ig',
+                    prefixIcon: const Icon(Icons.alternate_email, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: fbController,
+                  decoration: InputDecoration(
+                    labelText: 'Link / Alias Note Facebook',
+                    hintText: 'Ví dụ: note.2fa.live/facebook hoặc cuong_fb',
+                    prefixIcon: const Icon(Icons.facebook_outlined, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        igController.text = 'https://note.2fa.live/instagram';
+                        fbController.text = 'https://note.2fa.live/facebook';
+                      },
+                      icon: const Icon(Icons.restart_alt, size: 16),
+                      label: const Text('Mặc định', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newIg = igController.text.trim();
+                final newFb = fbController.text.trim();
+                authService.updateNotepadUrls(
+                  customIgNotepadUrl: newIg.isNotEmpty ? newIg : 'https://note.2fa.live/instagram',
+                  customFbNotepadUrl: newFb.isNotEmpty ? newFb : 'https://note.2fa.live/facebook',
+                );
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã cập nhật link Note 2FA mới thành công!')),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Lưu cài đặt', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

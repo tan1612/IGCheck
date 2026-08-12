@@ -250,12 +250,33 @@ class AuthService extends ChangeNotifier {
   }
 
 
-  void updateProfile(String name, String avatarUrl, {String? telegramChatId}) {
+  void updateProfile(String name, String avatarUrl, {String? telegramChatId, String? customIgNotepadUrl, String? customFbNotepadUrl}) {
     if (_currentUser == null) return;
     final updated = _currentUser!.copyWith(
       name: name,
       avatarUrl: avatarUrl,
       telegramChatId: telegramChatId,
+      customIgNotepadUrl: customIgNotepadUrl,
+      customFbNotepadUrl: customFbNotepadUrl,
+      updatedAt: DateTime.now(),
+    );
+
+    if (useFirebase) {
+      FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).update(updated.toJson());
+    } else {
+      final index = _mockUsers.indexWhere((u) => u.uid == _currentUser!.uid);
+      if (index != -1) _mockUsers[index] = updated;
+    }
+    
+    _currentUser = updated;
+    notifyListeners();
+  }
+
+  void updateNotepadUrls({String? customIgNotepadUrl, String? customFbNotepadUrl}) {
+    if (_currentUser == null) return;
+    final updated = _currentUser!.copyWith(
+      customIgNotepadUrl: customIgNotepadUrl ?? _currentUser!.customIgNotepadUrl,
+      customFbNotepadUrl: customFbNotepadUrl ?? _currentUser!.customFbNotepadUrl,
       updatedAt: DateTime.now(),
     );
 

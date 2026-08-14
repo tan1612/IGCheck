@@ -40,6 +40,58 @@ class AIService {
     return bytes;
   }
 
+  /// Tự động hỏi Google Gemini API danh sách các Model ĐANG HOẠT ĐỘNG cho API Key này
+  Future<List<String>> _fetchAvailableModels() async {
+    try {
+      final dio = Dio();
+      dio.options.connectTimeout = const Duration(seconds: 4);
+      dio.options.receiveTimeout = const Duration(seconds: 4);
+      final url = 'https://generativelanguage.googleapis.com/v1beta/models?key=$_apiKey';
+      final response = await dio.get(url);
+
+      if (response.statusCode == 200 && response.data != null) {
+        final modelsList = response.data['models'] as List?;
+        if (modelsList != null) {
+          final valid = <String>[];
+          for (final m in modelsList) {
+            final name = m['name']?.toString().replaceFirst('models/', '');
+            final methods = m['supportedGenerationMethods'] as List?;
+            if (name != null && methods != null && methods.contains('generateContent')) {
+              // Bỏ qua các model chuyên embedding
+              if (!name.contains('embedding') && !name.contains('imagen') && !name.contains('aqa')) {
+                valid.add(name);
+              }
+            }
+          }
+          if (valid.isNotEmpty) {
+            // Sắp xếp ưu tiên các model 'flash' lên đầu tiên để đạt tốc độ đọc cực nhanh
+            valid.sort((a, b) {
+              final aFlash = a.contains('flash');
+              final bFlash = b.contains('flash');
+              if (aFlash && !bFlash) return -1;
+              if (!aFlash && bFlash) return 1;
+              return a.compareTo(b);
+            });
+            debugPrint('🎯 AI Service: Đã tự động phát hiện danh sách Model khả dụng cho Key: $valid');
+            return valid;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('AI Service: Không thể lấy danh sách Model động: $e');
+    }
+
+    // Danh sách dự phòng chuẩn xác nếu không thể tải danh sách động
+    return [
+      'gemini-1.5-flash-002',
+      'gemini-1.5-flash-001',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-pro-002',
+      'gemini-1.5-pro-latest',
+      'gemini-2.0-flash-lite-preview-02-05',
+    ];
+  }
+
   /// Gửi ảnh lên Gemini Vision để trích xuất tên
   Future<String?> extractNameFromImage(XFile imageFile) async {
     if (_apiKey.isEmpty || _apiKey == 'NHET_KEY_CUA_NI_VAO_DAY') {
@@ -81,7 +133,7 @@ class AIService {
     }
   }
 
-  /// Gọi trực tiếp Google Gemini REST API với các model chuẩn (Tối ưu tốc độ phản hồi sub-second)
+  /// Gọi trực tiếp Google Gemini REST API với danh sách Model hoạt động động
   Future<String?> _callGeminiRestApi(List<int> bytes) async {
     final base64Image = base64Encode(bytes);
 
@@ -91,30 +143,25 @@ Không giải thích thêm, không có dấu ngoặc kép, không dùng markdown
 Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy trả về chữ 'KHÔNG ĐỌC ĐƯỢC'.
 ''';
 
+    // Tự động tìm các model đang hoạt động trên Google AI Studio
+    final activeModels = await _fetchAvailableModels();
+
     final dio = Dio();
     dio.options.connectTimeout = const Duration(seconds: 6);
     dio.options.receiveTimeout = const Duration(seconds: 15);
 
-    // Danh sách các mô hình chính thức chuẩn xác của Google Gemini REST API
-    final modelList = [
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
-      'gemini-2.0-flash-exp',
-      'gemini-1.5-pro',
-    ];
-
     final errors = <String>[];
 
-    for (final model in modelList) {
+    for (final model in activeModels) {
       try {
         final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_apiKey';
-        debugPrint('AI Service REST: Đang thử model $model...');
+        debugPrint('AI Service REST: Đang gọi model $model...');
 
         final response = await dio.post(
           url,
           options: Options(
             headers: {'Content-Type': 'application/json'},
-            receiveTimeout: const Duration(seconds: 6), // Timeout ngắn 6s cho mỗi model
+            receiveTimeout: const Duration(seconds: 8),
           ),
           data: {
             "contents": [
@@ -143,7 +190,7 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
               if (parts != null && parts.isNotEmpty) {
                 final resultText = parts[0]['text']?.toString().trim();
                 if (resultText != null && resultText.isNotEmpty) {
-                  debugPrint('🎉 AI Service REST: Thành công với model $model -> $resultText');
+                  debugPrint('🎉 AI Service REST: Thành công rực rỡ với model $model -> $resultText');
                   return resultText;
                 }
               }
@@ -167,7 +214,7 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
         } else {
           errMsg = e.toString();
         }
-        debugPrint('AI Service REST: Model $model bị bỏ qua: $errMsg');
+        debugPrint('AI Service REST: Model $model chưa kích hoạt/bị bỏ qua: $errMsg');
         errors.add(errMsg);
       }
     }

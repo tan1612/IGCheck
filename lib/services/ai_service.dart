@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/foundation.dart';
 
 class AIService {
@@ -20,6 +20,26 @@ class AIService {
     }
   }
 
+  /// Nén ảnh trước khi gửi để tối ưu tốc độ truyền qua mạng (từ 10MB xuống ~150KB)
+  Future<List<int>> _compressImageIfNeeded(List<int> bytes) async {
+    if (bytes.length < 500 * 1024) return bytes;
+    try {
+      final result = await FlutterImageCompress.compressWithList(
+        Uint8List.fromList(bytes),
+        minWidth: 1024,
+        minHeight: 1024,
+        quality: 80,
+      );
+      if (result.isNotEmpty && result.length < bytes.length) {
+        debugPrint('⚡ AI Service: Đã nén ảnh từ ${(bytes.length / 1024 / 1024).toStringAsFixed(2)}MB xuống ${(result.length / 1024).toStringAsFixed(1)}KB!');
+        return result;
+      }
+    } catch (e) {
+      debugPrint('AI Service warning nén ảnh: $e');
+    }
+    return bytes;
+  }
+
   /// Gửi ảnh lên Gemini Vision để trích xuất tên
   Future<String?> extractNameFromImage(XFile imageFile) async {
     if (_apiKey.isEmpty || _apiKey == 'NHET_KEY_CUA_NI_VAO_DAY') {
@@ -28,8 +48,9 @@ class AIService {
     }
 
     try {
-      final imageBytes = await imageFile.readAsBytes();
-      return await _callGeminiRestApi(imageBytes);
+      final rawBytes = await imageFile.readAsBytes();
+      final compressedBytes = await _compressImageIfNeeded(rawBytes);
+      return await _callGeminiRestApi(compressedBytes);
     } catch (e) {
       debugPrint('Lỗi đọc file ảnh: $e');
       return 'LỖI: Không thể đọc file ảnh!';
@@ -45,21 +66,22 @@ class AIService {
 
     try {
       final dio = Dio();
-      dio.options.connectTimeout = const Duration(seconds: 10);
+      dio.options.connectTimeout = const Duration(seconds: 8);
       dio.options.receiveTimeout = const Duration(seconds: 10);
       final responseHttp = await dio.get(
         imageUrl,
         options: Options(responseType: ResponseType.bytes),
       );
-      final bytes = responseHttp.data as List<int>;
-      return await _callGeminiRestApi(bytes);
+      final rawBytes = responseHttp.data as List<int>;
+      final compressedBytes = await _compressImageIfNeeded(rawBytes);
+      return await _callGeminiRestApi(compressedBytes);
     } catch (e) {
       debugPrint('Lỗi tải ảnh từ URL: $e');
       return 'LỖI: Không thể tải ảnh từ URL!';
     }
   }
 
-  /// Gọi trực tiếp Google Gemini REST API bằng Dio (Tương thích 100% mọi thiết bị & API Key)
+  /// Gọi trực tiếp Google Gemini REST API với các model chuẩn (Tối ưu tốc độ phản hồi sub-second)
   Future<String?> _callGeminiRestApi(List<int> bytes) async {
     final base64Image = base64Encode(bytes);
 
@@ -70,15 +92,14 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
 ''';
 
     final dio = Dio();
-    dio.options.connectTimeout = const Duration(seconds: 10);
-    dio.options.receiveTimeout = const Duration(seconds: 12);
+    dio.options.connectTimeout = const Duration(seconds: 6);
+    dio.options.receiveTimeout = const Duration(seconds: 15);
 
-    // Danh sách các mô hình Gemini hỗ trợ REST (Ưu tiên gemini-2.5-flash bản mới nhất)
+    // Danh sách các mô hình chính thức chuẩn xác của Google Gemini REST API
     final modelList = [
-      'gemini-2.5-flash',
-      'gemini-2.5-pro',
       'gemini-2.0-flash',
       'gemini-1.5-flash',
+      'gemini-2.0-flash-exp',
       'gemini-1.5-pro',
     ];
 
@@ -87,11 +108,14 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
     for (final model in modelList) {
       try {
         final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_apiKey';
-        debugPrint('AI Service REST: Đang gọi model $model...');
+        debugPrint('AI Service REST: Đang thử model $model...');
 
         final response = await dio.post(
           url,
-          options: Options(headers: {'Content-Type': 'application/json'}),
+          options: Options(
+            headers: {'Content-Type': 'application/json'},
+            receiveTimeout: const Duration(seconds: 6), // Timeout ngắn 6s cho mỗi model
+          ),
           data: {
             "contents": [
               {
@@ -119,7 +143,7 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
               if (parts != null && parts.isNotEmpty) {
                 final resultText = parts[0]['text']?.toString().trim();
                 if (resultText != null && resultText.isNotEmpty) {
-                  debugPrint('AI Service REST: Thành công với model $model -> $resultText');
+                  debugPrint('🎉 AI Service REST: Thành công với model $model -> $resultText');
                   return resultText;
                 }
               }
@@ -127,26 +151,24 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
           }
         }
       } catch (e) {
+        String errMsg = '';
         if (e is DioException) {
           final resp = e.response;
           if (resp != null && resp.data != null) {
             final errorData = resp.data;
-            String errMsg = '';
             if (errorData is Map && errorData['error'] != null) {
               errMsg = errorData['error']['message']?.toString() ?? e.message ?? e.toString();
             } else {
               errMsg = e.message ?? e.toString();
             }
-            debugPrint('AI Service REST Lỗi trên model $model: $errMsg');
-            errors.add(errMsg);
           } else {
-            debugPrint('AI Service REST Lỗi trên model $model: ${e.message}');
-            errors.add(e.message ?? e.toString());
+            errMsg = e.message ?? e.toString();
           }
         } else {
-          debugPrint('AI Service REST Lỗi trên model $model: $e');
-          errors.add(e.toString());
+          errMsg = e.toString();
         }
+        debugPrint('AI Service REST: Model $model bị bỏ qua: $errMsg');
+        errors.add(errMsg);
       }
     }
 

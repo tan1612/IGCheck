@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/foundation.dart';
+import 'package:igcheck/constants/ai_constants.dart';
 
 class AIService {
   // Đọc API Key bảo mật từ Environment Variables
@@ -95,7 +96,7 @@ class AIService {
     }
   }
 
-  /// Gọi trực tiếp Google Gemini REST API với các Model Flash tối ưu nhất
+  /// Gọi trực tiếp Google Gemini REST API với hằng số model tập trung (AIConstants)
   Future<String?> _callGeminiRestApi(List<int> bytes) async {
     final apiStopwatch = Stopwatch()..start();
     final base64Image = base64Encode(bytes);
@@ -110,14 +111,8 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
     dio.options.connectTimeout = const Duration(seconds: 6);
     dio.options.receiveTimeout = const Duration(seconds: 15);
 
-    // Danh sách các mô hình Flash tốc độ siêu nhanh (Không dùng bản Pro nặng)
-    final modelCandidates = [
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash-002',
-      'gemini-1.5-flash-001',
-      'gemini-1.5-flash',
-      'gemini-2.0-flash-lite-preview-02-05',
-    ];
+    // Lấy danh sách các model alias mới nhất từ AIConstants tập trung
+    final modelCandidates = AIConstants.modelCandidates;
 
     final errors = <String>[];
 

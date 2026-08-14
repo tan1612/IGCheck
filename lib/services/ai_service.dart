@@ -40,10 +40,13 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
       
       final imagePart = DataPart('image/jpeg', imageBytes);
 
-      // Danh sách các model chính thức của Google Gemini Vision (Ưu tiên gemini-1.5-flash cực nhanh)
+      // Danh sách các model chính thức của Google Gemini Vision trên v1beta API
       final modelCandidates = [
-        'gemini-1.5-flash',
+        'gemini-1.5-flash-latest',
         'gemini-2.0-flash-exp',
+        'gemini-2.0-flash',
+        'gemini-1.5-pro-latest',
+        'gemini-1.5-flash',
         'gemini-1.5-pro',
       ];
 
@@ -126,8 +129,11 @@ If the image is blurry or has no valid name, return 'KHÔNG ĐỌC ĐƯỢC'.
       final imagePart = DataPart('image/jpeg', bytes);
 
       final modelCandidates = [
-        'gemini-1.5-flash',
+        'gemini-1.5-flash-latest',
         'gemini-2.0-flash-exp',
+        'gemini-2.0-flash',
+        'gemini-1.5-pro-latest',
+        'gemini-1.5-flash',
         'gemini-1.5-pro',
       ];
 

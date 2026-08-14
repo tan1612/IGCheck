@@ -628,7 +628,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
   }
 
   Future<void> _scanNameAI() async {
-    if (_selectedFile == null) return;
+    if (_isScanning || _selectedFile == null) return;
     
     setState(() {
       _isScanning = true;

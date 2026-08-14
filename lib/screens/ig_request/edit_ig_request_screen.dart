@@ -270,7 +270,7 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
   }
 
   Future<void> _scanNameAI() async {
-    if (_selectedFile == null) return;
+    if (_isScanning || _selectedFile == null) return;
     
     setState(() {
       _isScanning = true;

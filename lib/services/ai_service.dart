@@ -41,11 +41,11 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
       
       final imagePart = DataPart('image/jpeg', imageBytes);
 
-      // Danh sách các model hỗ trợ trích xuất ảnh theo thứ tự ưu tiên
+      // Danh sách các model hỗ trợ trích xuất ảnh chuẩn của Google Gemini
       final modelCandidates = [
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-3.5-flash',
+        'gemini-1.5-flash',
+        'gemini-2.0-flash-exp',
+        'gemini-1.5-pro',
       ];
 
       final errors = <Object>[];
@@ -120,11 +120,11 @@ If the image is blurry or has no valid name, return 'KHÔNG ĐỌC ĐƯỢC'.
       
       final imagePart = DataPart('image/jpeg', bytes);
 
-      // Danh sách các model hỗ trợ trích xuất ảnh theo thứ tự ưu tiên
+      // Danh sách các model hỗ trợ trích xuất ảnh chuẩn của Google Gemini
       final modelCandidates = [
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-3.5-flash',
+        'gemini-1.5-flash',
+        'gemini-2.0-flash-exp',
+        'gemini-1.5-pro',
       ];
 
       final errors = <Object>[];

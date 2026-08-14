@@ -73,11 +73,12 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
     dio.options.connectTimeout = const Duration(seconds: 10);
     dio.options.receiveTimeout = const Duration(seconds: 12);
 
-    // Danh sách các mô hình Gemini chính thức được Google hỗ trợ REST
+    // Danh sách các mô hình Gemini hỗ trợ REST (Ưu tiên gemini-2.5-flash bản mới nhất)
     final modelList = [
-      'gemini-1.5-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
       'gemini-2.0-flash',
-      'gemini-2.0-flash-exp',
+      'gemini-1.5-flash',
       'gemini-1.5-pro',
     ];
 

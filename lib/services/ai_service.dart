@@ -1,6 +1,6 @@
-import 'package:dio/dio.dart' hide RequestOptions;
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter/foundation.dart';
 
 class AIService {
@@ -29,76 +29,10 @@ class AIService {
 
     try {
       final imageBytes = await imageFile.readAsBytes();
-      
-      final prompt = TextPart(
-        '''
-Đây là ảnh giấy tờ tùy thân. Hãy trích xuất và chỉ trả về DUY NHẤT Họ và Tên (Full Name) của người trên giấy tờ. 
-Không giải thích thêm, không có dấu ngoặc kép, không dùng markdown. 
-Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy trả về chữ 'KHÔNG ĐỌC ĐƯỢC'.
-'''
-      );
-      
-      final imagePart = DataPart('image/jpeg', imageBytes);
-
-      // Danh sách các model chính thức của Google Gemini Vision trên v1beta API
-      final modelCandidates = [
-        'gemini-1.5-flash-latest',
-        'gemini-2.0-flash-exp',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro-latest',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro',
-      ];
-
-      final errors = <Object>[];
-
-      for (final modelName in modelCandidates) {
-        try {
-          debugPrint('AI Service: Đang gọi model $modelName...');
-          final model = GenerativeModel(
-            model: modelName,
-            apiKey: _apiKey,
-          );
-
-          // Thêm timeout 8s để đảm bảo phản hồi tức thì
-          final response = await model.generateContent([
-            Content.multi([prompt, imagePart])
-          ]).timeout(const Duration(seconds: 8));
-
-          if (response.text != null && response.text!.trim().isNotEmpty) {
-            final resultText = response.text!.trim();
-            debugPrint('AI Service: Thành công với model $modelName -> $resultText');
-            return resultText;
-          }
-        } catch (e) {
-          debugPrint('Lỗi/Timeout với model $modelName: $e');
-          errors.add(e);
-        }
-      }
-
-      final hasQuotaError = errors.any((e) {
-        final str = e.toString();
-        return str.contains('429') || str.contains('quota') || str.contains('Too Many Requests');
-      });
-
-      if (hasQuotaError) {
-        return 'LỖI: Quá tải máy chủ AI, vui lòng thử lại sau 1 phút!';
-      }
-
-      if (errors.isNotEmpty) {
-        final firstErr = errors.first.toString();
-        if (firstErr.contains('TimeoutException')) {
-          return 'LỖI: Kết nối AI hết thời gian chờ, vui lòng thử lại!';
-        }
-        return 'LỖI: ${errors.first}';
-      }
-      return 'KHÔNG ĐỌC ĐƯỢC';
+      return await _callGeminiRestApi(imageBytes);
     } catch (e) {
-      debugPrint('Lỗi tổng khi gọi Gemini API: $e');
-      if (e.toString().contains('429') || e.toString().contains('quota') || e.toString().contains('Too Many Requests')) {
-        return 'LỖI: Quá tải máy chủ AI, vui lòng thử lại sau 1 phút!';
-      }
-      return 'LỖI: $e';
+      debugPrint('Lỗi đọc file ảnh: $e');
+      return 'LỖI: Không thể đọc file ảnh!';
     }
   }
 
@@ -112,74 +46,120 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
     try {
       final dio = Dio();
       dio.options.connectTimeout = const Duration(seconds: 10);
+      dio.options.receiveTimeout = const Duration(seconds: 10);
       final responseHttp = await dio.get(
         imageUrl,
         options: Options(responseType: ResponseType.bytes),
       );
-      final bytes = responseHttp.data;
-      
-      final prompt = TextPart(
-        '''
+      final bytes = responseHttp.data as List<int>;
+      return await _callGeminiRestApi(bytes);
+    } catch (e) {
+      debugPrint('Lỗi tải ảnh từ URL: $e');
+      return 'LỖI: Không thể tải ảnh từ URL!';
+    }
+  }
+
+  /// Gọi trực tiếp Google Gemini REST API bằng Dio (Tương thích 100% mọi thiết bị & API Key)
+  Future<String?> _callGeminiRestApi(List<int> bytes) async {
+    final base64Image = base64Encode(bytes);
+
+    const promptText = '''
 Đây là ảnh giấy tờ tùy thân. Hãy trích xuất và chỉ trả về DUY NHẤT Họ và Tên (Full Name) của người trên giấy tờ. 
 Không giải thích thêm, không có dấu ngoặc kép, không dùng markdown. 
-If the image is blurry or has no valid name, return 'KHÔNG ĐỌC ĐƯỢC'.
-'''
-      );
-      
-      final imagePart = DataPart('image/jpeg', bytes);
+Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy trả về chữ 'KHÔNG ĐỌC ĐƯỢC'.
+''';
 
-      final modelCandidates = [
-        'gemini-1.5-flash-latest',
-        'gemini-2.0-flash-exp',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro-latest',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro',
-      ];
+    final dio = Dio();
+    dio.options.connectTimeout = const Duration(seconds: 10);
+    dio.options.receiveTimeout = const Duration(seconds: 12);
 
-      final errors = <Object>[];
+    // Danh sách các mô hình Gemini chính thức được Google hỗ trợ REST
+    final modelList = [
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-pro',
+    ];
 
-      for (final modelName in modelCandidates) {
-        try {
-          debugPrint('AI Service: Đang gọi model $modelName từ URL...');
-          final model = GenerativeModel(
-            model: modelName,
-            apiKey: _apiKey,
-          );
-          final response = await model.generateContent([
-            Content.multi([prompt, imagePart])
-          ]).timeout(const Duration(seconds: 8));
+    final errors = <String>[];
 
-          if (response.text != null && response.text!.trim().isNotEmpty) {
-            final resultText = response.text!.trim();
-            debugPrint('AI Service: Thành công với model $modelName từ URL -> $resultText');
-            return resultText;
+    for (final model in modelList) {
+      try {
+        final url = 'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_apiKey';
+        debugPrint('AI Service REST: Đang gọi model $model...');
+
+        final response = await dio.post(
+          url,
+          options: Options(headers: {'Content-Type': 'application/json'}),
+          data: {
+            "contents": [
+              {
+                "parts": [
+                  {"text": promptText},
+                  {
+                    "inline_data": {
+                      "mime_type": "image/jpeg",
+                      "data": base64Image
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+        );
+
+        if (response.statusCode == 200 && response.data != null) {
+          final data = response.data;
+          final candidates = data['candidates'] as List?;
+          if (candidates != null && candidates.isNotEmpty) {
+            final content = candidates[0]['content'];
+            if (content != null) {
+              final parts = content['parts'] as List?;
+              if (parts != null && parts.isNotEmpty) {
+                final resultText = parts[0]['text']?.toString().trim();
+                if (resultText != null && resultText.isNotEmpty) {
+                  debugPrint('AI Service REST: Thành công với model $model -> $resultText');
+                  return resultText;
+                }
+              }
+            }
           }
-        } catch (e) {
-          debugPrint('Lỗi/Timeout với model $modelName từ URL: $e');
-          errors.add(e);
+        }
+      } catch (e) {
+        if (e is DioException) {
+          final resp = e.response;
+          if (resp != null && resp.data != null) {
+            final errorData = resp.data;
+            String errMsg = '';
+            if (errorData is Map && errorData['error'] != null) {
+              errMsg = errorData['error']['message']?.toString() ?? e.message ?? e.toString();
+            } else {
+              errMsg = e.message ?? e.toString();
+            }
+            debugPrint('AI Service REST Lỗi trên model $model: $errMsg');
+            errors.add(errMsg);
+          } else {
+            debugPrint('AI Service REST Lỗi trên model $model: ${e.message}');
+            errors.add(e.message ?? e.toString());
+          }
+        } else {
+          debugPrint('AI Service REST Lỗi trên model $model: $e');
+          errors.add(e.toString());
         }
       }
-
-      final hasQuotaError = errors.any((e) {
-        final str = e.toString();
-        return str.contains('429') || str.contains('quota') || str.contains('Too Many Requests');
-      });
-
-      if (hasQuotaError) {
-        return 'LỖI: Quá tải máy chủ AI, vui lòng thử lại sau 1 phút!';
-      }
-
-      if (errors.isNotEmpty) {
-        return 'LỖI: ${errors.first}';
-      }
-      return 'KHÔNG ĐỌC ĐƯỢC';
-    } catch (e) {
-      debugPrint('Lỗi khi gọi Gemini API từ URL: $e');
-      if (e.toString().contains('429') || e.toString().contains('quota') || e.toString().contains('Too Many Requests')) {
-        return 'LỖI: Quá tải máy chủ AI, vui lòng thử lại sau 1 phút!';
-      }
-      return 'LỖI: $e';
     }
+
+    if (errors.isNotEmpty) {
+      final first = errors.first;
+      if (first.contains('API key not valid') || first.contains('API_KEY_INVALID') || first.contains('invalid API key')) {
+        return 'LỖI: Gemini API Key không hợp lệ. Vui lòng kiểm tra lại API Key!';
+      }
+      if (first.contains('429') || first.contains('quota') || first.contains('RESOURCE_EXHAUSTED')) {
+        return 'LỖI: Quá tải hạn ngạch API (Quota Limit), vui lòng thử lại sau 1 phút!';
+      }
+      return 'LỖI: ${errors.first}';
+    }
+
+    return 'KHÔNG ĐỌC ĐƯỢC';
   }
 }

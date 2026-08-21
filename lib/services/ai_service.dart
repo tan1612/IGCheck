@@ -77,8 +77,9 @@ class AIService {
     final totalStopwatch = Stopwatch()..start();
     try {
       final dio = Dio();
-      dio.options.connectTimeout = const Duration(seconds: 8);
-      dio.options.receiveTimeout = const Duration(seconds: 10);
+      dio.options.connectTimeout = AIConstants.geminiApiConnectTimeout;
+      dio.options.sendTimeout = AIConstants.geminiApiSendTimeout;
+      dio.options.receiveTimeout = AIConstants.geminiApiReceiveTimeout;
       final responseHttp = await dio.get(
         imageUrl,
         options: Options(responseType: ResponseType.bytes),
@@ -92,6 +93,9 @@ class AIService {
     } catch (e) {
       totalStopwatch.stop();
       debugPrint('Lỗi tải ảnh từ URL: $e');
+      if (e is DioException && (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.sendTimeout || e.type == DioExceptionType.receiveTimeout)) {
+        return AIConstants.timeoutErrorMessage;
+      }
       return 'LỖI: Không thể tải ảnh từ URL!';
     }
   }
@@ -108,8 +112,9 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
 ''';
 
     final dio = Dio();
-    dio.options.connectTimeout = const Duration(seconds: 6);
-    dio.options.receiveTimeout = const Duration(seconds: 15);
+    dio.options.connectTimeout = AIConstants.geminiApiConnectTimeout;
+    dio.options.sendTimeout = AIConstants.geminiApiSendTimeout;
+    dio.options.receiveTimeout = AIConstants.geminiApiReceiveTimeout;
 
     // Lấy danh sách các model alias mới nhất từ AIConstants tập trung
     final modelCandidates = AIConstants.modelCandidates;
@@ -126,7 +131,9 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
           url,
           options: Options(
             headers: {'Content-Type': 'application/json'},
-            receiveTimeout: const Duration(seconds: 8),
+            connectTimeout: AIConstants.geminiApiConnectTimeout,
+            sendTimeout: AIConstants.geminiApiSendTimeout,
+            receiveTimeout: AIConstants.geminiApiReceiveTimeout,
           ),
           data: {
             "contents": [
@@ -172,16 +179,26 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
       } catch (e) {
         String errMsg = '';
         if (e is DioException) {
-          final resp = e.response;
-          if (resp != null && resp.data != null) {
-            final errorData = resp.data;
-            if (errorData is Map && errorData['error'] != null) {
-              errMsg = errorData['error']['message']?.toString() ?? e.message ?? e.toString();
+          if (e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              (e.message != null && e.message!.toLowerCase().contains('took longer than')) ||
+              (e.message != null && e.message!.toLowerCase().contains('timeout'))) {
+            errMsg = AIConstants.timeoutErrorMessage;
+          } else if (e.type == DioExceptionType.connectionError) {
+            errMsg = AIConstants.networkErrorMessage;
+          } else {
+            final resp = e.response;
+            if (resp != null && resp.data != null) {
+              final errorData = resp.data;
+              if (errorData is Map && errorData['error'] != null) {
+                errMsg = errorData['error']['message']?.toString() ?? e.message ?? e.toString();
+              } else {
+                errMsg = e.message ?? e.toString();
+              }
             } else {
               errMsg = e.message ?? e.toString();
             }
-          } else {
-            errMsg = e.message ?? e.toString();
           }
         } else {
           errMsg = e.toString();
@@ -194,6 +211,16 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
     apiStopwatch.stop();
 
     if (errors.isNotEmpty) {
+      final hasTimeout = errors.any((err) => err == AIConstants.timeoutErrorMessage || err.contains('TIMEOUT') || err.toLowerCase().contains('took longer than'));
+      if (hasTimeout) {
+        return AIConstants.timeoutErrorMessage;
+      }
+
+      final hasNetwork = errors.any((err) => err == AIConstants.networkErrorMessage || err.contains('NETWORK'));
+      if (hasNetwork) {
+        return AIConstants.networkErrorMessage;
+      }
+
       final first = errors.first;
       if (first.contains('API key not valid') || first.contains('API_KEY_INVALID') || first.contains('invalid API key')) {
         return 'LỖI: Gemini API Key không hợp lệ. Vui lòng kiểm tra lại API Key!';
@@ -201,9 +228,10 @@ Nếu hình ảnh bị mờ hoặc không tìm thấy tên hợp lệ, hãy tr�
       if (first.contains('429') || first.contains('quota') || first.contains('RESOURCE_EXHAUSTED')) {
         return 'LỖI: Quá tải hạn ngạch API (Quota Limit), vui lòng thử lại sau 1 phút!';
       }
-      return 'LỖI: ${errors.first}';
+      return 'LỖI: Kết nối tới AI không thành công, vui lòng thử lại!';
     }
 
     return 'KHÔNG ĐỌC ĐƯỢC';
   }
 }
+

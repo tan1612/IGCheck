@@ -222,6 +222,9 @@ class _DashboardHomeState extends State<DashboardHome> {
         final needsUpdateCount = filteredRequests.where((r) => r.status == 'needs_update').length;
         final waitingFeedbackCount = filteredRequests.where((r) => r.status == 'rejected').length;
 
+        final verifiedCount = filteredRequests.where((r) => r.isVerified).length;
+        final deadCount = filteredRequests.where((r) => r.accountStatus == 'dead').length;
+
         return Scaffold(
           backgroundColor: const Color(0xFFF5F6FA),
           appBar: AppBar(
@@ -397,23 +400,18 @@ class _DashboardHomeState extends State<DashboardHome> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Stats title
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Trạng thái hồ sơ ${_selectedType == 'facebook' ? 'Facebook' : 'Instagram'}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1C1C1E),
-                        ),
-                      ),
-                    ],
+                  // Stats title: Trạng thái xử lý
+                  Text(
+                    'Trạng thái xử lý hồ sơ (${_selectedType == 'facebook' ? 'Facebook' : 'Instagram'})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1C1C1E),
+                    ),
                   ),
                   const SizedBox(height: 10),
 
-                  // Stats Grid (Compact style)
+                  // Stats Grid (4 cards)
                   GridView.count(
                     crossAxisCount: 2,
                     crossAxisSpacing: 10,
@@ -449,6 +447,43 @@ class _DashboardHomeState extends State<DashboardHome> {
                         color: const Color(0xFFFF3B30),
                         icon: Icons.cancel_outlined,
                         requestsList: filteredRequests.where((r) => r.status == 'rejected').toList(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Special Stats Section: Tích xanh & Acc DIE
+                  Text(
+                    'Trạng thái tài khoản (${_selectedType == 'facebook' ? 'Facebook' : 'Instagram'})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1C1C1E),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 2.2,
+                    children: [
+                      _buildStatCard(
+                        title: 'Đã tích xanh',
+                        count: verifiedCount,
+                        color: Colors.blue,
+                        icon: Icons.verified,
+                        requestsList: filteredRequests.where((r) => r.isVerified).toList(),
+                      ),
+                      _buildStatCard(
+                        title: 'Tài khoản DIE',
+                        count: deadCount,
+                        color: Colors.red.shade700,
+                        icon: Icons.heart_broken_outlined,
+                        requestsList: filteredRequests.where((r) => r.accountStatus == 'dead').toList(),
                       ),
                     ],
                   ),

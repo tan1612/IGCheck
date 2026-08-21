@@ -56,8 +56,8 @@ class SentScreen extends StatelessWidget {
 
             return TabBarView(
               children: [
-                _buildRequestList(context, instagramList, 'Instagram'),
-                _buildRequestList(context, facebookList, 'Facebook'),
+                _RequestListWithFilter(list: instagramList, typeLabel: 'Instagram'),
+                _RequestListWithFilter(list: facebookList, typeLabel: 'Facebook'),
               ],
             );
           },
@@ -65,9 +65,37 @@ class SentScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildRequestList(BuildContext context, List<IGRequestModel> list, String typeLabel) {
-    if (list.isEmpty) {
+class _RequestListWithFilter extends StatefulWidget {
+  final List<IGRequestModel> list;
+  final String typeLabel;
+
+  const _RequestListWithFilter({
+    required this.list,
+    required this.typeLabel,
+  });
+
+  @override
+  State<_RequestListWithFilter> createState() => _RequestListWithFilterState();
+}
+
+class _RequestListWithFilterState extends State<_RequestListWithFilter> {
+  String _filter = 'all'; // 'all', 'verified', 'dead'
+
+  @override
+  Widget build(BuildContext context) {
+    List<IGRequestModel> filtered = widget.list;
+    if (_filter == 'verified') {
+      filtered = filtered.where((r) => r.isVerified).toList();
+    } else if (_filter == 'dead') {
+      filtered = filtered.where((r) => r.accountStatus == 'dead').toList();
+    }
+
+    final verifiedCount = widget.list.where((r) => r.isVerified).length;
+    final deadCount = widget.list.where((r) => r.accountStatus == 'dead').length;
+
+    if (widget.list.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -86,7 +114,7 @@ class SentScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Chưa gửi hồ sơ $typeLabel nào',
+              'Chưa gửi hồ sơ ${widget.typeLabel} nào',
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -95,7 +123,7 @@ class SentScreen extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Các hồ sơ $typeLabel bạn gửi cho người kia sẽ xuất hiện ở đây.',
+              'Các hồ sơ ${widget.typeLabel} bạn gửi cho người kia sẽ xuất hiện ở đây.',
               style: const TextStyle(
                 fontSize: 13,
                 color: Color(0xFF8E8E93),
@@ -117,28 +145,83 @@ class SentScreen extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        await Future.delayed(const Duration(milliseconds: 500));
-      },
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: list.length,
-        padding: const EdgeInsets.only(top: 8, bottom: 24),
-        itemBuilder: (context, index) {
-          final request = list[index];
-          return RequestCard(
-            request: request,
-            onTap: () {
-              Navigator.pushNamed(
-                context,
-                '/ig_request_detail',
-                arguments: request,
-              );
-            },
-          );
-        },
-      ),
+    return Column(
+      children: [
+        // Quick filter chips row
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: Text('Tất cả (${widget.list.length})'),
+                selected: _filter == 'all',
+                onSelected: (selected) {
+                  if (selected) setState(() => _filter = 'all');
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                avatar: const Icon(Icons.verified, size: 16, color: Colors.blue),
+                label: Text('Đã tích xanh ($verifiedCount)'),
+                selected: _filter == 'verified',
+                selectedColor: Colors.blue.shade50,
+                onSelected: (selected) {
+                  if (selected) setState(() => _filter = 'verified');
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                avatar: const Icon(Icons.heart_broken_outlined, size: 16, color: Colors.red),
+                label: Text('Tài khoản DIE ($deadCount)'),
+                selected: _filter == 'dead',
+                selectedColor: Colors.red.shade50,
+                onSelected: (selected) {
+                  if (selected) setState(() => _filter = 'dead');
+                },
+              ),
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    _filter == 'verified'
+                        ? 'Không có hồ sơ tích xanh nào'
+                        : _filter == 'dead'
+                            ? 'Không có tài khoản DIE nào'
+                            : 'Danh sách trống',
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await Future.delayed(const Duration(milliseconds: 500));
+                  },
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: filtered.length,
+                    padding: const EdgeInsets.only(top: 4, bottom: 24),
+                    itemBuilder: (context, index) {
+                      final request = filtered[index];
+                      return RequestCard(
+                        request: request,
+                        onTap: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/ig_request_detail',
+                            arguments: request,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
+

@@ -289,7 +289,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     if (mounted) {
       Navigator.pop(context);
 
-      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI:');
+      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI');
       if (isSuccess) {
         await Clipboard.setData(ClipboardData(text: resultName));
       }
@@ -306,15 +306,34 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
           );
         } else {
           _aiExtractedName = resultName;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                isSuccess
-                    ? 'AI đã nhận diện & sao chép: $resultName'
-                    : 'AI đã nhận diện: $resultName'
+          if (resultName.startsWith('LỖI')) {
+            final cleanMsg = resultName.replaceFirst(RegExp(r'^LỖI(_[A-Z]+)?:?\s*'), '');
+            final displayMsg = cleanMsg.isNotEmpty ? cleanMsg : 'Kết nối mạng chậm, vui lòng thử lại.';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(displayMsg),
+                backgroundColor: Colors.red.shade700,
+                duration: const Duration(seconds: 8),
+                action: SnackBarAction(
+                  label: 'Thử lại',
+                  textColor: Colors.yellowAccent,
+                  onPressed: () {
+                    _scanNameAI();
+                  },
+                ),
               ),
-            ),
-          );
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  isSuccess
+                      ? 'AI đã nhận diện & sao chép: $resultName'
+                      : 'AI đã nhận diện: $resultName'
+                ),
+              ),
+            );
+          }
         }
       });
     }

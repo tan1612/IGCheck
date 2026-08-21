@@ -25,6 +25,7 @@ class IGRequestModel {
   final String accountType; // 'instagram' or 'facebook'
   final int rejectionCount; // Number of times rejected
   final bool isVerified; // Check if user has verification badge (blue checkmark)
+  final String accountStatus; // 'live', 'dead', 'unknown'
 
   IGRequestModel({
     required this.id,
@@ -51,6 +52,7 @@ class IGRequestModel {
     this.accountType = 'instagram',
     this.rejectionCount = 0,
     this.isVerified = false,
+    this.accountStatus = 'unknown',
   });
 
   IGRequestModel copyWith({
@@ -78,6 +80,7 @@ class IGRequestModel {
     String? accountType,
     int? rejectionCount,
     bool? isVerified,
+    String? accountStatus,
   }) {
     return IGRequestModel(
       id: id ?? this.id,
@@ -104,6 +107,7 @@ class IGRequestModel {
       accountType: accountType ?? this.accountType,
       rejectionCount: rejectionCount ?? this.rejectionCount,
       isVerified: isVerified ?? this.isVerified,
+      accountStatus: accountStatus ?? this.accountStatus,
     );
   }
 
@@ -133,6 +137,7 @@ class IGRequestModel {
       accountType: json['accountType'] as String? ?? 'instagram',
       rejectionCount: _parseInt(json['rejectionCount']),
       isVerified: json['isVerified'] as bool? ?? false,
+      accountStatus: json['accountStatus'] as String? ?? 'unknown',
     );
   }
 
@@ -177,6 +182,7 @@ class IGRequestModel {
       'accountType': accountType,
       'rejectionCount': rejectionCount,
       'isVerified': isVerified,
+      'accountStatus': accountStatus,
     };
   }
 }

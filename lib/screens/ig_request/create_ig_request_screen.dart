@@ -663,7 +663,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       // Dismiss dialog
       Navigator.pop(context);
       
-      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI:');
+      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI');
       if (isSuccess) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final firestoreService = Provider.of<FirestoreService>(context, listen: false);
@@ -707,17 +707,36 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         }
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            resultName == null 
-              ? 'Chưa cấu hình API Key, vui lòng kiểm tra lại.'
-              : isSuccess
-                ? 'AI đã nhận diện & sao chép: $resultName'
-                : resultName
+      if (resultName != null && resultName.startsWith('LỖI')) {
+        final cleanMsg = resultName.replaceFirst(RegExp(r'^LỖI(_[A-Z]+)?:?\s*'), '');
+        final displayMsg = cleanMsg.isNotEmpty ? cleanMsg : 'Kết nối mạng chậm, vui lòng thử lại.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(displayMsg),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'Thử lại',
+              textColor: Colors.yellowAccent,
+              onPressed: () {
+                _scanNameAI();
+              },
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              resultName == null 
+                ? 'Chưa cấu hình API Key, vui lòng kiểm tra lại.'
+                : isSuccess
+                  ? 'AI đã nhận diện & sao chép: $resultName'
+                  : resultName
+            ),
+          ),
+        );
+      }
     }
   }
 

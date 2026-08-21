@@ -95,6 +95,25 @@ class RequestCard extends StatelessWidget {
                                   size: 16,
                                 ),
                               ],
+                              if (request.accountStatus == 'dead') ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.red.shade400, width: 0.5),
+                                  ),
+                                  child: const Text(
+                                    'DIE',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

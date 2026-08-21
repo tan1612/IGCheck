@@ -392,8 +392,9 @@ async function pollTelegramUpdates() {
       }
     }
   } catch (e) {
-    if (!e.message.includes('timeout') && !e.message.includes('ECONNABORTED')) {
-      console.error('Error polling Telegram updates:', e.message);
+    const errStr = String(e?.message || e || '');
+    if (!errStr.includes('timeout') && !errStr.includes('ECONNABORTED')) {
+      console.error('Error polling Telegram updates:', errStr);
     }
   }
 }
@@ -410,12 +411,16 @@ async function startTelegramBotPolling() {
     });
     console.log("Telegram Bot commands registered successfully.");
   } catch (e) {
-    console.error("Failed to register Telegram commands:", e.message);
+    console.error("Failed to register Telegram commands:", e?.message || e);
   }
 
   while (true) {
-    await pollTelegramUpdates();
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      await pollTelegramUpdates();
+    } catch (err) {
+      console.error("Error in Telegram bot polling loop:", err?.message || err);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1500));
   }
 }
 

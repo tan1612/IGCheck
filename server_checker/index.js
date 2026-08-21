@@ -129,8 +129,25 @@ async function checkProfileStatus(accountType, usernameOrUid) {
   }
 }
 
+function withHardTimeout(promise, ms = 10000) {
+  let timer;
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      resolve({ isLive: null, isVerified: null, error: 'Hard timeout exceeded' });
+    }, ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 // 4. Sweeper function to scan all active requests (Live/Die & Tích xanh status)
+let isSweeping = false;
+
 async function scanActiveRequests() {
+  if (isSweeping) {
+    console.log(`[${new Date().toISOString()}] Sweep is already in progress, skipping duplicate trigger.`);
+    return;
+  }
+  isSweeping = true;
   console.log(`[${new Date().toISOString()}] Starting status and verification sweep...`);
   try {
     const snapshot = await db.collection('requests').get();
@@ -150,101 +167,107 @@ async function scanActiveRequests() {
     console.log(`Found ${activeDocs.length} active requests to check.`);
 
     for (const doc of activeDocs) {
-      const req = doc.data();
-      const serviceLabel = req.accountType === 'facebook' ? 'Facebook' : 'Instagram';
-      const username = req.instagramUsername;
+      try {
+        const req = doc.data();
+        const serviceLabel = req.accountType === 'facebook' ? 'Facebook' : 'Instagram';
+        const username = req.instagramUsername;
 
-      console.log(`Checking ${serviceLabel} account: ${username}...`);
+        console.log(`Checking ${serviceLabel} account: ${username}...`);
 
-      const result = await checkProfileStatus(req.accountType, username);
+        const result = await withHardTimeout(checkProfileStatus(req.accountType, username), 10000);
 
-      // Skip if network request failed completely (e.g. timeout / internet loss)
-      if (result.isLive === null) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        continue;
-      }
-
-      const prevVerified = !!req.isVerified;
-      const prevAccountStatus = req.accountStatus || 'unknown';
-
-      const currentVerified = result.isVerified;
-      const currentAccountStatus = result.isLive ? 'live' : 'dead';
-
-      let updateData = {};
-      let notifications = [];
-
-      // 1. Check for NEW VERIFIED (Tích Xanh) status
-      if (currentVerified && !prevVerified) {
-        console.log(`🎉 SUCCESS: ${username} has achieved VERIFIED status!`);
-        updateData.isVerified = true;
-        notifications.push(
-          `🎉 <b>TÀI KHOẢN ĐẠT TÍCH XANH!</b> 🎉\n` +
-          `Tài khoản ${serviceLabel} <code>${username}</code> vừa được phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!`
-        );
-      }
-
-      // 2. Check for Account DIE status change
-      if (currentAccountStatus === 'dead' && prevAccountStatus !== 'dead') {
-        console.log(`⚠️ ALERT: ${username} is DEAD!`);
-        updateData.accountStatus = 'dead';
-        notifications.push(
-          `⚠️ <b>CẢNH BÁO TÀI KHOẢN BỊ DIE!</b> ⚠️\n` +
-          `Tài khoản ${serviceLabel} <code>${username}</code> vừa chuyển trạng thái sang <b>DIE (Bị vô hiệu hóa / Không tồn tại)</b>!`
-        );
-      }
-      // 3. Check for Account RESTORED (DIE -> LIVE)
-      else if (currentAccountStatus === 'live' && prevAccountStatus === 'dead') {
-        console.log(`✅ RESTORED: ${username} is LIVE again!`);
-        updateData.accountStatus = 'live';
-        notifications.push(
-          `✅ <b>TÀI KHOẢN ĐÃ LIVE TRỞ LẠI!</b> ✅\n` +
-          `Tài khoản ${serviceLabel} <code>${username}</code> vừa khôi phục trạng thái <b>LIVE</b> hoạt động bình thường!`
-        );
-      }
-      // 4. Initial check for newly added account if it's already dead on creation
-      else if (prevAccountStatus === 'unknown' && currentAccountStatus === 'dead') {
-        console.log(`⚠️ ALERT: Newly added ${username} is DEAD!`);
-        updateData.accountStatus = 'dead';
-        notifications.push(
-          `⚠️ <b>CẢNH BÁO: TÀI KHOẢN MỚI GỬI ĐÃ BỊ DIE!</b> ⚠️\n` +
-          `Tài khoản ${serviceLabel} <code>${username}</code> vừa gửi nhưng đã ở trạng thái <b>DIE</b>!`
-        );
-      } else if (prevAccountStatus === 'unknown') {
-        updateData.accountStatus = 'live';
-      }
-
-      // Save updates to Firestore
-      if (Object.keys(updateData).length > 0) {
-        updateData.updatedAt = new Date().toISOString();
-        if (!updateData.lastAction) {
-          updateData.lastAction = updateData.isVerified ? 'updated_verified' : 'updated_account_status';
+        // Skip if network request failed completely (e.g. timeout / internet loss)
+        if (result.isLive === null) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          continue;
         }
-        await doc.ref.update(updateData);
-      }
 
-      // Send Telegram notifications to sender & receiver
-      if (notifications.length > 0) {
-        const senderSnap = await db.collection('users').doc(req.senderId).get();
-        const receiverSnap = await db.collection('users').doc(req.receiverId).get();
+        const prevVerified = !!req.isVerified;
+        const prevAccountStatus = req.accountStatus || 'unknown';
 
-        const sender = senderSnap.exists ? senderSnap.data() : null;
-        const receiver = receiverSnap.exists ? receiverSnap.data() : null;
+        const currentVerified = result.isVerified;
+        const currentAccountStatus = result.isLive ? 'live' : 'dead';
 
-        for (const textMsg of notifications) {
-          if (sender && sender.telegramChatId) {
-            await sendTelegramMessage(sender.telegramChatId, textMsg);
+        let updateData = {};
+        let notifications = [];
+
+        // 1. Check for NEW VERIFIED (Tích Xanh) status
+        if (currentVerified && !prevVerified) {
+          console.log(`🎉 SUCCESS: ${username} has achieved VERIFIED status!`);
+          updateData.isVerified = true;
+          notifications.push(
+            `🎉 <b>TÀI KHOẢN ĐẠT TÍCH XANH!</b> 🎉\n` +
+            `Tài khoản ${serviceLabel} <code>${username}</code> vừa được phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!`
+          );
+        }
+
+        // 2. Check for Account DIE status change
+        if (currentAccountStatus === 'dead' && prevAccountStatus !== 'dead') {
+          console.log(`⚠️ ALERT: ${username} is DEAD!`);
+          updateData.accountStatus = 'dead';
+          notifications.push(
+            `⚠️ <b>CẢNH BÁO TÀI KHOẢN BỊ DIE!</b> ⚠️\n` +
+            `Tài khoản ${serviceLabel} <code>${username}</code> vừa chuyển trạng thái sang <b>DIE (Bị vô hiệu hóa / Không tồn tại)</b>!`
+          );
+        }
+        // 3. Check for Account RESTORED (DIE -> LIVE)
+        else if (currentAccountStatus === 'live' && prevAccountStatus === 'dead') {
+          console.log(`✅ RESTORED: ${username} is LIVE again!`);
+          updateData.accountStatus = 'live';
+          notifications.push(
+            `✅ <b>TÀI KHOẢN ĐÃ LIVE TRỞ LẠI!</b> ✅\n` +
+            `Tài khoản ${serviceLabel} <code>${username}</code> vừa khôi phục trạng thái <b>LIVE</b> hoạt động bình thường!`
+          );
+        }
+        // 4. Initial check for newly added account if it's already dead on creation
+        else if (prevAccountStatus === 'unknown' && currentAccountStatus === 'dead') {
+          console.log(`⚠️ ALERT: Newly added ${username} is DEAD!`);
+          updateData.accountStatus = 'dead';
+          notifications.push(
+            `⚠️ <b>CẢNH BÁO: TÀI KHOẢN MỚI GỬI ĐÃ BỊ DIE!</b> ⚠️\n` +
+            `Tài khoản ${serviceLabel} <code>${username}</code> vừa gửi nhưng đã ở trạng thái <b>DIE</b>!`
+          );
+        } else if (prevAccountStatus === 'unknown') {
+          updateData.accountStatus = 'live';
+        }
+
+        // Save updates to Firestore
+        if (Object.keys(updateData).length > 0) {
+          updateData.updatedAt = new Date().toISOString();
+          if (!updateData.lastAction) {
+            updateData.lastAction = updateData.isVerified ? 'updated_verified' : 'updated_account_status';
           }
-          if (receiver && receiver.telegramChatId && receiver.telegramChatId !== sender?.telegramChatId) {
-            await sendTelegramMessage(receiver.telegramChatId, textMsg);
+          await doc.ref.update(updateData);
+        }
+
+        // Send Telegram notifications to sender & receiver
+        if (notifications.length > 0) {
+          const senderSnap = await db.collection('users').doc(req.senderId).get();
+          const receiverSnap = await db.collection('users').doc(req.receiverId).get();
+
+          const sender = senderSnap.exists ? senderSnap.data() : null;
+          const receiver = receiverSnap.exists ? receiverSnap.data() : null;
+
+          for (const textMsg of notifications) {
+            if (sender && sender.telegramChatId) {
+              await sendTelegramMessage(sender.telegramChatId, textMsg);
+            }
+            if (receiver && receiver.telegramChatId && receiver.telegramChatId !== sender?.telegramChatId) {
+              await sendTelegramMessage(receiver.telegramChatId, textMsg);
+            }
           }
         }
+      } catch (errDoc) {
+        console.error(`Error processing request doc ${doc.id}:`, errDoc.message);
       }
 
-      // Delay 2 seconds between checks to prevent rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Delay 1.5 seconds between checks to prevent rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
   } catch (e) {
     console.error("Error during sweep execution:", e.message);
+  } finally {
+    isSweeping = false;
   }
 }
 

@@ -397,9 +397,9 @@ async function pollTelegramUpdates() {
     const response = await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`, {
       params: {
         offset: lastUpdateId + 1,
-        timeout: 10,
+        timeout: 1,
       },
-      timeout: 15000,
+      timeout: 5000,
     });
 
     const updates = response.data.result || [];

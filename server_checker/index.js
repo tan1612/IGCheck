@@ -442,3 +442,15 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Health check HTTP server is listening on port ${PORT}`);
 });
+
+// 8. Self-ping every 4 minutes to keep Render Free Instance awake 24/7 without sleeping
+const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://igcheck-checker.onrender.com';
+setInterval(async () => {
+  try {
+    await axios.get(`${RENDER_EXTERNAL_URL}/healthz`, { timeout: 10000 });
+    console.log("Self-ping sent to keep Render instance active.");
+  } catch (e) {
+    // Ignore ping errors
+  }
+}, 4 * 60 * 1000);
+

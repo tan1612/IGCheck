@@ -268,7 +268,7 @@ const defaultReplyKeyboard = {
 async function handleTelegramMessage(msg) {
   const chatId = msg.chat.id;
   const text = (msg.text || '').trim();
-  const textLower = text.toLowerCase();
+  let textLower = text.toLowerCase().replace(/@\w+/g, '');
 
   console.log(`Received Telegram message from ${chatId}: "${text}"`);
 

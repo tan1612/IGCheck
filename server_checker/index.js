@@ -57,38 +57,61 @@ async function sendTelegramLongMessage(chatId, text, replyMarkup = null) {
 }
 
 // 3. Profile Status & Verification Checker function
-async function checkProfileStatus(accountType, usernameOrUid) {
+async function checkInstagramProfile(username) {
+  const cleanUser = username.startsWith('@') ? username.substring(1).trim() : username.trim();
+  
+  // Method 1: Official Instagram Web Profile Info API
   try {
-    let url = '';
-    const cleanUser = usernameOrUid.startsWith('@') 
-      ? usernameOrUid.substring(1).trim() 
-      : usernameOrUid.trim();
-
-    if (accountType.toLowerCase() === 'instagram') {
-      url = `https://www.instagram.com/${cleanUser}/`;
-    } else {
-      url = `https://www.facebook.com/${cleanUser}/`;
-    }
-
-    const response = await axios.get(url, {
+    const apiUrl = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${cleanUser}`;
+    const response = await axios.get(apiUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'x-ig-app-id': '936619743392459',
+        'Accept': '*/*',
         'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
       },
-      timeout: 10000,
+      timeout: 8000
+    });
+
+    if (response.status === 200 && response.data && response.data.data) {
+      const userObj = response.data.data.user;
+      if (!userObj) {
+        return { isLive: false, isVerified: false };
+      }
+      const isVerified = userObj.is_verified === true;
+      console.log(`[IG API] ${cleanUser} -> isLive: true, isVerified: ${isVerified}`);
+      return {
+        isLive: true,
+        isVerified: isVerified
+      };
+    }
+  } catch (e) {
+    if (e.response && e.response.status === 404) {
+      return { isLive: false, isVerified: false };
+    }
+    console.log(`[IG API] Check failed for ${cleanUser}, using HTML fallback:`, e.message);
+  }
+
+  // Method 2: HTML Page Fallback Check
+  try {
+    const pageUrl = `https://www.instagram.com/${cleanUser}/`;
+    const response = await axios.get(pageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+      timeout: 8000,
       validateStatus: (status) => status < 500
     });
 
-    const statusCode = response.status;
-    const html = response.data || '';
-
-    // Check for 404 HTTP status code
-    if (statusCode === 404) {
+    if (response.status === 404) {
       return { isLive: false, isVerified: false };
     }
 
-    // Check for DEAD keywords in HTML content
+    const html = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || {});
+    const htmlLower = html.toLowerCase();
+
     const deadKeywords = [
       'page not found',
       'trang này không hiển thị',
@@ -103,29 +126,90 @@ async function checkProfileStatus(accountType, usernameOrUid) {
       'rest_of_world_account_disabled',
       'profile_not_found'
     ];
-
-    const htmlLower = typeof html === 'string' ? html.toLowerCase() : '';
     for (const kw of deadKeywords) {
       if (htmlLower.includes(kw)) {
         return { isLive: false, isVerified: false };
       }
     }
 
-    // Check for VERIFIED indicators
-    const isVerifiedRegex = /"is_verified"\s*:\s*true/;
-    const verifiedRegex = /"verified"\s*:\s*true/;
-    let isVerified = isVerifiedRegex.test(html) || verifiedRegex.test(html);
+    const isVerified = 
+      /"is_verified"\s*:\s*true/i.test(html) ||
+      /"verified"\s*:\s*true/i.test(html) ||
+      /"is_verified_by_mvp"\s*:\s*true/i.test(html) ||
+      /"is_blue_badge"\s*:\s*true/i.test(html) ||
+      (/is_verified/i.test(html) && html.includes('true'));
 
-    if (accountType.toLowerCase() === 'facebook') {
-      if (html.includes('verification_status') && html.includes('blue_verified')) {
-        isVerified = true;
+    console.log(`[IG HTML] ${cleanUser} -> isLive: true, isVerified: ${isVerified}`);
+    return { isLive: true, isVerified };
+  } catch (e) {
+    console.error(`Error requesting profile page for ${cleanUser}:`, e.message);
+    return { isLive: null, isVerified: null, error: e.message };
+  }
+}
+
+async function checkFacebookProfile(usernameOrUid) {
+  const cleanUser = usernameOrUid.startsWith('@') ? usernameOrUid.substring(1).trim() : usernameOrUid.trim();
+  try {
+    const url = `https://www.facebook.com/${cleanUser}`;
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+      timeout: 10000,
+      maxRedirects: 5,
+      validateStatus: (status) => status < 500
+    });
+
+    if (response.status === 404) {
+      return { isLive: false, isVerified: false };
+    }
+
+    const html = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || {});
+    const htmlLower = html.toLowerCase();
+
+    const deadKeywords = [
+      'page not found',
+      'trang này không hiển thị',
+      'trang me không hiển thị',
+      'trang này không tồn tại',
+      'trang này không khả dụng',
+      "this content isn't available right now",
+      "this page isn't available",
+      "sorry, this page isn't available",
+      'the link you followed may be broken',
+      'user_disabled',
+      'rest_of_world_account_disabled',
+      'profile_not_found'
+    ];
+    for (const kw of deadKeywords) {
+      if (htmlLower.includes(kw)) {
+        return { isLive: false, isVerified: false };
       }
     }
 
+    const isVerified = 
+      (html.includes('verification_status') && html.includes('blue_verified')) ||
+      /"is_verified"\s*:\s*true/i.test(html) ||
+      /"verified"\s*:\s*true/i.test(html) ||
+      /"is_meta_verified"\s*:\s*true/i.test(html) ||
+      /verified_badge/i.test(html) ||
+      /aria-label="(đã xác minh|tích xanh|verified)"/i.test(html);
+
+    console.log(`[FB HTML] ${cleanUser} -> isLive: true, isVerified: ${isVerified}`);
     return { isLive: true, isVerified };
   } catch (e) {
-    console.error(`Error requesting profile page for ${usernameOrUid}:`, e.message);
+    console.error(`Error requesting FB page for ${cleanUser}:`, e.message);
     return { isLive: null, isVerified: null, error: e.message };
+  }
+}
+
+async function checkProfileStatus(accountType, usernameOrUid) {
+  if (accountType.toLowerCase() === 'instagram') {
+    return await checkInstagramProfile(usernameOrUid);
+  } else {
+    return await checkFacebookProfile(usernameOrUid);
   }
 }
 

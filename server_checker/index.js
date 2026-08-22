@@ -413,69 +413,31 @@ async function handleTelegramMessage(msg) {
   }
 }
 
-let lastUpdateId = 0;
-
-async function pollTelegramUpdates() {
-  try {
-    const response = await axios.get(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`, {
-      params: {
-        offset: lastUpdateId + 1,
-        timeout: 1,
-      },
-      timeout: 5000,
-    });
-
-    const updates = response.data.result || [];
-    for (const update of updates) {
-      lastUpdateId = Math.max(lastUpdateId, update.update_id);
-      try {
-        if (update.message && update.message.text) {
-          await handleTelegramMessage(update.message);
-        }
-      } catch (err) {
-        console.error(`Error handling update ${update.update_id}:`, err?.message || err);
-      }
-    }
-  }
-  } catch (e) {
-    const errStr = String(e?.message || e || '');
-    if (!errStr.includes('timeout') && !errStr.includes('ECONNABORTED')) {
-      console.error('Error polling Telegram updates:', errStr);
-    }
-  }
-}
-
-async function startTelegramBotPolling() {
-  try {
-    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
-      commands: [
-        { command: 'menu', description: 'Hiển thị menu nút bấm' },
-        { command: 'tichxanh', description: 'DS tài khoản Tích Xanh (Lấy bán)' },
-        { command: 'die', description: 'DS tài khoản bị DIE' },
-        { command: 'tatca', description: 'DS tất cả hồ sơ' },
-      ]
-    });
-    console.log("Telegram Bot commands registered successfully.");
-  } catch (e) {
-    console.error("Failed to register Telegram commands:", e?.message || e);
-  }
-
-  while (true) {
-    try {
-      await pollTelegramUpdates();
-    } catch (err) {
-      console.error("Error in Telegram bot polling loop:", err?.message || err);
-    }
-    await new Promise(resolve => setTimeout(resolve, 1500));
-  }
-}
-
-// Start polling in background
-startTelegramBotPolling();
-
-// 7. Simple HTTP Server for Health Checks (Required by Render/Koyeb)
+// 7. HTTP Server for Health Checks and Telegram Webhook (Required by Render/Koyeb)
 const PORT = process.env.PORT || 8080;
+const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://igcheck-checker.onrender.com';
+
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/telegram-webhook') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        if (body) {
+          const update = JSON.parse(body);
+          if (update.message) {
+            await handleTelegramMessage(update.message);
+          }
+        }
+      } catch (e) {
+        console.error("Error processing Telegram webhook update:", e.message);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'OK' }));
+    });
+    return;
+  }
+
   if (req.url === '/healthz' || req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'OK', message: 'IGCheck background service is running.' }));
@@ -489,14 +451,29 @@ server.listen(PORT, () => {
   console.log(`Health check HTTP server is listening on port ${PORT}`);
 });
 
-// 8. Self-ping every 4 minutes to keep Render Free Instance awake 24/7 without sleeping
-const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://igcheck-checker.onrender.com';
-setInterval(async () => {
+// Setup Telegram Webhook & Commands on startup
+async function setupTelegramBot() {
   try {
-    await axios.get(`${RENDER_EXTERNAL_URL}/healthz`, { timeout: 10000 });
-    console.log("Self-ping sent to keep Render instance active.");
+    const webhookUrl = `${RENDER_EXTERNAL_URL}/telegram-webhook`;
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
+      url: webhookUrl,
+      drop_pending_updates: true
+    });
+    console.log(`Telegram Webhook registered successfully to: ${webhookUrl}`);
+
+    await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+      commands: [
+        { command: 'menu', description: 'Hiển thị menu nút bấm' },
+        { command: 'tichxanh', description: 'DS tài khoản Tích Xanh (Lấy bán)' },
+        { command: 'die', description: 'DS tài khoản bị DIE' },
+        { command: 'tatca', description: 'DS tất cả hồ sơ' },
+      ]
+    });
+    console.log("Telegram Bot commands registered successfully.");
   } catch (e) {
-    // Ignore ping errors
+    console.error("Failed to register Telegram Webhook/Commands:", e?.message || e);
   }
-}, 4 * 60 * 1000);
+}
+
+setupTelegramBot();
 

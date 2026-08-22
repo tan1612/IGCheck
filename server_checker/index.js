@@ -226,8 +226,8 @@ function withHardTimeout(promise, ms = 10000) {
 // 4. Sweeper function to scan all active requests (Live/Die & Tích xanh status)
 let isSweeping = false;
 
-async function scanActiveRequests() {
-  if (isSweeping) {
+async function scanActiveRequests(targetChatId = null) {
+  if (isSweeping && !targetChatId) {
     console.log(`[${new Date().toISOString()}] Sweep is already in progress, skipping duplicate trigger.`);
     return;
   }
@@ -237,18 +237,24 @@ async function scanActiveRequests() {
     const snapshot = await db.collection('requests').get();
 
     if (snapshot.empty) {
-      console.log("No requests to sweep.");
+      if (targetChatId) await sendTelegramMessage(targetChatId, `📋 Không có hồ sơ nào trong hệ thống.`, defaultReplyKeyboard);
       return;
     }
 
     const activeDocs = snapshot.docs.filter(doc => doc.data().status !== 'cancelled');
 
     if (activeDocs.length === 0) {
-      console.log("No active requests to sweep.");
+      if (targetChatId) await sendTelegramMessage(targetChatId, `📋 Không có hồ sơ active nào.`, defaultReplyKeyboard);
       return;
     }
 
     console.log(`Found ${activeDocs.length} active requests to check.`);
+
+    if (targetChatId) {
+      await sendTelegramMessage(targetChatId, `⏳ <b>Đang tiến hành quét trực tiếp ${activeDocs.length} tài khoản...</b>\nVui lòng đợi vài giây.`);
+    }
+
+    let summaryResults = [];
 
     for (const doc of activeDocs) {
       try {
@@ -262,6 +268,7 @@ async function scanActiveRequests() {
 
         // Skip if network request failed completely (e.g. timeout / internet loss)
         if (result.isLive === null) {
+          summaryResults.push(`• <b>${username}</b> (${serviceLabel}): ⚠️ Lỗi kết nối`);
           await new Promise(resolve => setTimeout(resolve, 1500));
           continue;
         }
@@ -275,10 +282,17 @@ async function scanActiveRequests() {
         let updateData = {};
         let notifications = [];
 
+        // Save status changes
+        if (currentVerified !== prevVerified) {
+          updateData.isVerified = currentVerified;
+        }
+        if (currentAccountStatus !== prevAccountStatus) {
+          updateData.accountStatus = currentAccountStatus;
+        }
+
         // 1. Check for NEW VERIFIED (Tích Xanh) status
         if (currentVerified && !prevVerified) {
           console.log(`🎉 SUCCESS: ${username} has achieved VERIFIED status!`);
-          updateData.isVerified = true;
           notifications.push(
             `🎉 <b>TÀI KHOẢN ĐẠT TÍCH XANH!</b> 🎉\n` +
             `Tài khoản ${serviceLabel} <code>${username}</code> vừa được phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!`
@@ -288,7 +302,6 @@ async function scanActiveRequests() {
         // 2. Check for Account DIE status change
         if (currentAccountStatus === 'dead' && prevAccountStatus !== 'dead') {
           console.log(`⚠️ ALERT: ${username} is DEAD!`);
-          updateData.accountStatus = 'dead';
           notifications.push(
             `⚠️ <b>CẢNH BÁO TÀI KHOẢN BỊ DIE!</b> ⚠️\n` +
             `Tài khoản ${serviceLabel} <code>${username}</code> vừa chuyển trạng thái sang <b>DIE (Bị vô hiệu hóa / Không tồn tại)</b>!`
@@ -297,7 +310,6 @@ async function scanActiveRequests() {
         // 3. Check for Account RESTORED (DIE -> LIVE)
         else if (currentAccountStatus === 'live' && prevAccountStatus === 'dead') {
           console.log(`✅ RESTORED: ${username} is LIVE again!`);
-          updateData.accountStatus = 'live';
           notifications.push(
             `✅ <b>TÀI KHOẢN ĐÃ LIVE TRỞ LẠI!</b> ✅\n` +
             `Tài khoản ${serviceLabel} <code>${username}</code> vừa khôi phục trạng thái <b>LIVE</b> hoạt động bình thường!`
@@ -306,14 +318,14 @@ async function scanActiveRequests() {
         // 4. Initial check for newly added account if it's already dead on creation
         else if (prevAccountStatus === 'unknown' && currentAccountStatus === 'dead') {
           console.log(`⚠️ ALERT: Newly added ${username} is DEAD!`);
-          updateData.accountStatus = 'dead';
           notifications.push(
             `⚠️ <b>CẢNH BÁO: TÀI KHOẢN MỚI GỬI ĐÃ BỊ DIE!</b> ⚠️\n` +
             `Tài khoản ${serviceLabel} <code>${username}</code> vừa gửi nhưng đã ở trạng thái <b>DIE</b>!`
           );
-        } else if (prevAccountStatus === 'unknown') {
-          updateData.accountStatus = 'live';
         }
+
+        const iconStr = currentVerified ? '💙 TÍCH XANH' : (currentAccountStatus === 'dead' ? '🔴 DIE' : '✅ LIVE');
+        summaryResults.push(`• <code>${username}</code> (${serviceLabel}): <b>${iconStr}</b>`);
 
         // Save updates to Firestore
         if (Object.keys(updateData).length > 0) {
@@ -348,6 +360,11 @@ async function scanActiveRequests() {
       // Delay 1.5 seconds between checks to prevent rate limiting
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
+
+    if (targetChatId) {
+      const reportMsg = `✅ <b>KẾT QUẢ QUÉT KIỂM TRA TRỰC TIẾP (${activeDocs.length} ACC)</b> ✅\n\n` + summaryResults.join('\n');
+      await sendTelegramLongMessage(targetChatId, reportMsg, defaultReplyKeyboard);
+    }
   } catch (e) {
     console.error("Error during sweep execution:", e.message);
   } finally {
@@ -362,11 +379,11 @@ setInterval(scanActiveRequests, INTERVAL_MS);
 // Run initial scan immediately on startup
 setTimeout(scanActiveRequests, 5000);
 
-// 6. Telegram Interactive Bot Menu & Polling Logic
+// 6. Telegram Interactive Bot Menu & Webhook Logic
 const defaultReplyKeyboard = {
   keyboard: [
-    [{ text: '💙 DS Tài khoản Tích Xanh' }, { text: '🔴 DS Tài khoản DIE' }],
-    [{ text: '📋 Danh sách Tất cả Hồ sơ' }, { text: '❓ Hướng dẫn' }]
+    [{ text: '🔄 Quét Ngay (Check Live/Die)' }, { text: '💙 DS Tài khoản Tích Xanh' }],
+    [{ text: '🔴 DS Tài khoản DIE' }, { text: '📋 Danh sách Tất cả Hồ sơ' }]
   ],
   resize_keyboard: true,
   persistent: true
@@ -387,9 +404,15 @@ async function handleTelegramMessage(msg) {
 
   console.log(`Received Telegram message from ${chatId}: "${text}"`);
 
+  if (textLower.includes('quét ngay') || textLower === '/quetngay') {
+    scanActiveRequests(chatId);
+    return;
+  }
+
   if (textLower === '/start' || textLower === '/menu' || textLower === 'menu' || textLower === '❓ hướng dẫn') {
     const welcomeMsg = `🤖 <b>HỆ THỐNG QUẢN LÝ TÀI KHOẢN TÍCH XANH & LIVE/DIE</b>\n\n` +
       `Vui lòng chọn nút chức năng bên dưới menu để xem và lấy tài khoản bán:\n\n` +
+      `• <b>🔄 Quét Ngay (Check Live/Die):</b> Kiểm tra trực tiếp toàn bộ tài khoản real-time ngay lập tức.\n` +
       `• <b>💙 DS Tài khoản Tích Xanh:</b> Xem & copy nhanh thông tin (User, Pass, 2FA) tài khoản đã tích xanh để bán.\n` +
       `• <b>🔴 DS Tài khoản DIE:</b> Danh sách các tài khoản bị chết/bị khóa.\n` +
       `• <b>📋 Danh sách Tất cả Hồ sơ:</b> Danh sách tổng thể toàn bộ hồ sơ.`;

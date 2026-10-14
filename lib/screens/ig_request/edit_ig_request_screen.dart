@@ -11,6 +11,7 @@ import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/ai_service.dart';
+import '../../services/meta_checker_service.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
 import '../../utils/validators.dart';
@@ -30,9 +31,13 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
   final _noteController = TextEditingController();
   final _passwordController = TextEditingController();
   final _twoFactorKeyController = TextEditingController();
+  final _cookieController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _emailPasswordController = TextEditingController();
 
   bool _isUploading = false;
   bool _isInitialized = false;
+  bool _isAutoGettingCookie = false;
   
   XFile? _selectedFile;
   double _imageSize = 0;
@@ -46,6 +51,9 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
     _noteController.dispose();
     _passwordController.dispose();
     _twoFactorKeyController.dispose();
+    _cookieController.dispose();
+    _emailController.dispose();
+    _emailPasswordController.dispose();
     super.dispose();
   }
 
@@ -160,6 +168,9 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
         note: _noteController.text.trim(),
         password: _passwordController.text.trim(),
         twoFactorKey: _twoFactorKeyController.text.trim(),
+        cookie: _cookieController.text.trim(),
+        email: _emailController.text.trim(),
+        emailPassword: _emailPasswordController.text.trim(),
         imageUrl: newImageUrl,
         thumbnailImageUrl: newThumbnailImageUrl,
         imageSizeBytes: newImageSizeBytes,
@@ -393,6 +404,9 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
       _noteController.text = request.note;
       _passwordController.text = request.password;
       _twoFactorKeyController.text = request.twoFactorKey;
+      _cookieController.text = request.cookie;
+      _emailController.text = request.email;
+      _emailPasswordController.text = request.emailPassword;
       _isInitialized = true;
     }
 
@@ -525,6 +539,140 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _cookieController,
+                  labelText: 'Cookie (Tùy chọn)',
+                  hintText: 'Ví dụ: c_user=...; xs=...',
+                  prefixIcon: Icons.cookie_outlined,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isAutoGettingCookie)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.deepPurple)),
+                        )
+                      else
+                        TextButton.icon(
+                          onPressed: () async {
+                            final u = _usernameController.text.trim();
+                            final p = _passwordController.text.trim();
+                            final k = _twoFactorKeyController.text.trim();
+                            if (u.isEmpty || p.isEmpty || k.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Vui lòng điền đủ Tài khoản, Mật khẩu và Khóa 2FA trước.')),
+                              );
+                              return;
+                            }
+                            final messenger = ScaffoldMessenger.of(context);
+                            setState(() => _isAutoGettingCookie = true);
+                            try {
+                              final cookie = await MetaCheckerService.loginAndExtractCookie(
+                                username: u,
+                                password: p,
+                                twoFactorKey: k,
+                              );
+                              setState(() {
+                                _cookieController.text = cookie;
+                                _isAutoGettingCookie = false;
+                              });
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  const SnackBar(content: Text('Đã tự động lấy Cookie thành công!')),
+                                );
+                              }
+                            } catch (e) {
+                              setState(() => _isAutoGettingCookie = false);
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Lỗi lấy Cookie: ${e.toString().replaceAll("Exception: ", "")}'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.auto_awesome, size: 14, color: Colors.deepPurple),
+                          label: const Text('Tự lấy', style: TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _cookieController,
+                        builder: (context, value, child) {
+                          if (value.text.isEmpty) return const SizedBox.shrink();
+                          return IconButton(
+                            icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                            onPressed: () {
+                              final val = _cookieController.text.trim();
+                              if (val.isNotEmpty) {
+                                Clipboard.setData(ClipboardData(text: val));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Đã sao chép Cookie!'), duration: Duration(seconds: 1)),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emailController,
+                  labelText: 'Email tài khoản (Tùy chọn)',
+                  hintText: 'Ví dụ: hotro@gmail.com',
+                  prefixIcon: Icons.email_outlined,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _emailController,
+                    builder: (context, value, child) {
+                      if (value.text.isEmpty) return const SizedBox.shrink();
+                      return IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                        onPressed: () {
+                          final val = _emailController.text.trim();
+                          if (val.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: val));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép Email!'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emailPasswordController,
+                  labelText: 'Mật khẩu Email (Tùy chọn)',
+                  hintText: 'Nhập mật khẩu email',
+                  prefixIcon: Icons.key_outlined,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _emailPasswordController,
+                    builder: (context, value, child) {
+                      if (value.text.isEmpty) return const SizedBox.shrink();
+                      return IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                        onPressed: () {
+                          final val = _emailPasswordController.text.trim();
+                          if (val.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: val));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép mật khẩu email!'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 16),
                 AppTextField(
                   controller: _displayNameController,

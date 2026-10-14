@@ -16,6 +16,8 @@ import '../../widgets/app_text_field.dart';
 import '../../models/user_model.dart';
 import '../../utils/validators.dart';
 import '../../utils/otp_helper.dart';
+import '../../utils/account_parser_helper.dart';
+import '../../services/meta_checker_service.dart';
 import 'package:dio/dio.dart';
 
 class CreateIGRequestScreen extends StatefulWidget {
@@ -32,10 +34,14 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
   final _noteController = TextEditingController();
   final _passwordController = TextEditingController();
   final _twoFactorKeyController = TextEditingController();
+  final _cookieController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _emailPasswordController = TextEditingController();
   final _quickImportController = TextEditingController();
   
   String _accountType = 'instagram'; // 'instagram' or 'facebook'
   bool _isSubmitting = false;
+  bool _isAutoGettingCookie = false;
 
   XFile? _selectedFile;
   double _imageSize = 0;
@@ -52,6 +58,9 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     _noteController.dispose();
     _passwordController.dispose();
     _twoFactorKeyController.dispose();
+    _cookieController.dispose();
+    _emailController.dispose();
+    _emailPasswordController.dispose();
     _quickImportController.dispose();
     super.dispose();
   }
@@ -273,19 +282,12 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         throw Exception('Không có dữ liệu tài khoản trong Notepad.');
       }
 
-      final lines = rawContent.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty && l.contains('|')).toList();
-      if (lines.isEmpty) {
-        throw Exception('Không tìm thấy tài khoản định dạng hợp lệ (dạng tài khoản|mật khẩu|2fa) trong Notepad.');
+      final parsedAccounts = AccountParserHelper.parseMultipleLines(rawContent);
+      if (parsedAccounts.isEmpty) {
+        throw Exception('Không tìm thấy tài khoản định dạng hợp lệ (dạng tài khoản|mật khẩu|2fa hoặc cookie) trong Notepad.');
       }
 
-      var accounts = lines.map((line) {
-        final parts = line.split('|');
-        return {
-          'username': parts[0].trim(),
-          'password': parts.length > 1 ? parts[1].trim() : '',
-          'twoFactorKey': parts.length > 2 ? parts[2].trim() : '',
-        };
-      }).toList();
+      var accounts = parsedAccounts;
 
       if (filterDuplicates && user != null && user.pairId != null && user.pairId!.isNotEmpty) {
         final existingRequests = await firestoreService.getRequestsByPairId(user.pairId!);
@@ -295,7 +297,8 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         }).toSet();
 
         accounts = accounts.where((acc) {
-          final username = acc['username']!;
+          if (acc.username.isEmpty) return true;
+          final username = acc.username;
           final normalized = username.startsWith('@') ? username.substring(1).toLowerCase() : username.toLowerCase();
           return !existingUsernames.contains(normalized);
         }).toList();
@@ -308,18 +311,21 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       if (accounts.length == 1) {
         final acc = accounts.first;
         setState(() {
-          _usernameController.text = acc['username']!;
-          _passwordController.text = acc['password']!;
-          _twoFactorKeyController.text = acc['twoFactorKey']!;
+          _usernameController.text = acc.username;
+          _passwordController.text = acc.password;
+          _twoFactorKeyController.text = acc.twoFactorKey;
+          _cookieController.text = acc.cookie;
+          _emailController.text = acc.email;
+          _emailPasswordController.text = acc.emailPassword;
           _quickImportController.clear();
           _currentOtp = ''; // reset OTP
           _importedNotepadAlias = alias;
-          _importedUsername = acc['username']!;
+          _importedUsername = acc.username;
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Đã nhập thành công tài khoản: ${acc['username']}'),
+              content: Text('Đã nhập thành công tài khoản: ${acc.username.isNotEmpty ? acc.username : (acc.hasCookie ? "Cookie" : "")}'),
             ),
           );
         }
@@ -498,7 +504,7 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
     }
   }
 
-  void _showAccountSelectionBottomSheet(List<Map<String, String>> accounts, String alias) {
+  void _showAccountSelectionBottomSheet(List<ParsedAccount> accounts, String alias) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -509,11 +515,20 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'Chọn tài khoản muốn nhập',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Chọn tài khoản muốn nhập',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                    ),
+                    Text(
+                      '${accounts.length} tài khoản',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
               ),
               const Divider(height: 1),
@@ -527,25 +542,71 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                         backgroundColor: Color(0xFFE8F0FE),
                         child: Icon(Icons.person, color: Colors.blue),
                       ),
-                      title: Text(acc['username']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              acc.username.isNotEmpty ? acc.username : '(Chưa có UID/Username)',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (acc.hasTwoFactor) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE3F2FD),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('2FA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          if (acc.hasCookie) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3E0),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Cookie', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          if (acc.hasEmail) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F8F5),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Mail', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.teal)),
+                            ),
+                          ],
+                        ],
+                      ),
                       subtitle: Text(
-                        'Pass: ${acc['password']!.isNotEmpty ? "••••••" : "(trống)"} | 2FA: ${acc['twoFactorKey']!.isNotEmpty ? (acc['twoFactorKey']!.length > 8 ? "${acc['twoFactorKey']!.substring(0, 8)}..." : acc['twoFactorKey']!) : "(trống)"}',
+                        'Pass: ${acc.password.isNotEmpty ? "••••••" : "(trống)"} | 2FA: ${acc.twoFactorKey.isNotEmpty ? (acc.twoFactorKey.length > 8 ? "${acc.twoFactorKey.substring(0, 8)}..." : acc.twoFactorKey) : "(trống)"}${acc.hasCookie ? " | Cookie: (Có)" : ""}${acc.hasEmail ? " | Mail: (Có)" : ""}',
                         style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        overflow: TextOverflow.ellipsis,
                       ),
                       onTap: () {
                         setState(() {
-                          _usernameController.text = acc['username']!;
-                          _passwordController.text = acc['password']!;
-                          _twoFactorKeyController.text = acc['twoFactorKey']!;
+                          _usernameController.text = acc.username;
+                          _passwordController.text = acc.password;
+                          _twoFactorKeyController.text = acc.twoFactorKey;
+                          _cookieController.text = acc.cookie;
+                          _emailController.text = acc.email;
+                          _emailPasswordController.text = acc.emailPassword;
                           _quickImportController.clear();
                           _currentOtp = ''; // reset OTP
                           _importedNotepadAlias = alias;
-                          _importedUsername = acc['username']!;
+                          _importedUsername = acc.username;
                         });
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Đã nhập thành công tài khoản: ${acc['username']}'),
+                            content: Text('Đã nhập thành công tài khoản: ${acc.username.isNotEmpty ? acc.username : (acc.hasCookie ? "Cookie" : "")}'),
                           ),
                         );
                       },
@@ -566,16 +627,25 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
       _importFromNotepad(clean, filterDuplicates: true);
       return;
     }
-    if (clean.contains('|')) {
-      final parts = clean.split('|');
-      if (parts.isNotEmpty) {
-        _usernameController.text = parts[0].trim();
+    if (clean.contains('|') || AccountParserHelper.isCookie(clean)) {
+      final parsed = AccountParserHelper.parseLine(clean);
+      if (parsed.username.isNotEmpty) {
+        _usernameController.text = parsed.username;
       }
-      if (parts.length > 1) {
-        _passwordController.text = parts[1].trim();
+      if (parsed.password.isNotEmpty) {
+        _passwordController.text = parsed.password;
       }
-      if (parts.length > 2) {
-        _twoFactorKeyController.text = parts[2].trim();
+      if (parsed.twoFactorKey.isNotEmpty) {
+        _twoFactorKeyController.text = parsed.twoFactorKey;
+      }
+      if (parsed.cookie.isNotEmpty) {
+        _cookieController.text = parsed.cookie;
+      }
+      if (parsed.email.isNotEmpty) {
+        _emailController.text = parsed.email;
+      }
+      if (parsed.emailPassword.isNotEmpty) {
+        _emailPasswordController.text = parsed.emailPassword;
       }
     }
   }
@@ -875,6 +945,9 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
         note: _noteController.text.trim(),
         password: _passwordController.text.trim(),
         twoFactorKey: _twoFactorKeyController.text.trim(),
+        cookie: _cookieController.text.trim(),
+        email: _emailController.text.trim(),
+        emailPassword: _emailPasswordController.text.trim(),
         imageUrl: imageUrl,
         thumbnailImageUrl: thumbnailImageUrl,
         originalImagePath: originalImagePath,
@@ -1269,6 +1342,140 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emailController,
+                  labelText: 'Email (Tùy chọn)',
+                  hintText: 'Ví dụ: clone123@gmail.com',
+                  prefixIcon: Icons.email_outlined,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _emailController,
+                    builder: (context, value, child) {
+                      if (value.text.isEmpty) return const SizedBox.shrink();
+                      return IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                        onPressed: () {
+                          final val = _emailController.text.trim();
+                          if (val.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: val));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép Email!'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _emailPasswordController,
+                  labelText: 'Mật khẩu Email (Tùy chọn)',
+                  hintText: 'Mật khẩu của email đính kèm...',
+                  prefixIcon: Icons.lock_clock_outlined,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _emailPasswordController,
+                    builder: (context, value, child) {
+                      if (value.text.isEmpty) return const SizedBox.shrink();
+                      return IconButton(
+                        icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                        onPressed: () {
+                          final val = _emailPasswordController.text.trim();
+                          if (val.isNotEmpty) {
+                            Clipboard.setData(ClipboardData(text: val));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Đã sao chép mật khẩu email!'), duration: Duration(seconds: 1)),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  controller: _cookieController,
+                  labelText: 'Cookie (Tùy chọn)',
+                  hintText: 'Ví dụ: c_user=...; xs=...',
+                  prefixIcon: Icons.cookie_outlined,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isAutoGettingCookie)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.deepPurple)),
+                        )
+                      else
+                        TextButton.icon(
+                          onPressed: () async {
+                            final u = _usernameController.text.trim();
+                            final p = _passwordController.text.trim();
+                            final k = _twoFactorKeyController.text.trim();
+                            if (u.isEmpty || p.isEmpty || k.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Vui lòng điền đủ Tài khoản, Mật khẩu và Khóa 2FA trước.')),
+                              );
+                              return;
+                            }
+                            final messenger = ScaffoldMessenger.of(context);
+                            setState(() => _isAutoGettingCookie = true);
+                            try {
+                              final cookie = await MetaCheckerService.loginAndExtractCookie(
+                                username: u,
+                                password: p,
+                                twoFactorKey: k,
+                              );
+                              setState(() {
+                                _cookieController.text = cookie;
+                                _isAutoGettingCookie = false;
+                              });
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  const SnackBar(content: Text('Đã tự động lấy Cookie thành công!')),
+                                );
+                              }
+                            } catch (e) {
+                              setState(() => _isAutoGettingCookie = false);
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text('Lỗi lấy Cookie: ${e.toString().replaceAll("Exception: ", "")}'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.auto_awesome, size: 14, color: Colors.deepPurple),
+                          label: const Text('Tự lấy', style: TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _cookieController,
+                        builder: (context, value, child) {
+                          if (value.text.isEmpty) return const SizedBox.shrink();
+                          return IconButton(
+                            icon: const Icon(Icons.copy_rounded, color: Color(0xFF8E8EF8), size: 20),
+                            onPressed: () {
+                              final val = _cookieController.text.trim();
+                              if (val.isNotEmpty) {
+                                Clipboard.setData(ClipboardData(text: val));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Đã sao chép Cookie!'), duration: Duration(seconds: 1)),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 16),
                 AppTextField(
                   controller: _displayNameController,

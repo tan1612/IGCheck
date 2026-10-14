@@ -7,6 +7,10 @@ class IGRequestModel {
   final String note;
   final String password;
   final String twoFactorKey;
+  final String cookie;
+  final String email;
+  final String emailPassword;
+  final String metaVerifiedStatus; // 'pending', 'needed', 'active', 'expired', or ''
   final String originalImageUrl;
   final String thumbnailImageUrl;
   final String originalImagePath;
@@ -34,6 +38,10 @@ class IGRequestModel {
     required this.note,
     this.password = '',
     this.twoFactorKey = '',
+    this.cookie = '',
+    this.email = '',
+    this.emailPassword = '',
+    this.metaVerifiedStatus = '',
     required this.originalImageUrl,
     required this.thumbnailImageUrl,
     required this.originalImagePath,
@@ -62,6 +70,10 @@ class IGRequestModel {
     String? note,
     String? password,
     String? twoFactorKey,
+    String? cookie,
+    String? email,
+    String? emailPassword,
+    String? metaVerifiedStatus,
     String? originalImageUrl,
     String? thumbnailImageUrl,
     String? originalImagePath,
@@ -89,6 +101,10 @@ class IGRequestModel {
       note: note ?? this.note,
       password: password ?? this.password,
       twoFactorKey: twoFactorKey ?? this.twoFactorKey,
+      cookie: cookie ?? this.cookie,
+      email: email ?? this.email,
+      emailPassword: emailPassword ?? this.emailPassword,
+      metaVerifiedStatus: metaVerifiedStatus ?? this.metaVerifiedStatus,
       originalImageUrl: originalImageUrl ?? this.originalImageUrl,
       thumbnailImageUrl: thumbnailImageUrl ?? this.thumbnailImageUrl,
       originalImagePath: originalImagePath ?? this.originalImagePath,
@@ -119,6 +135,10 @@ class IGRequestModel {
       note: json['note'] as String? ?? '',
       password: json['password'] as String? ?? '',
       twoFactorKey: json['twoFactorKey'] as String? ?? '',
+      cookie: json['cookie'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      emailPassword: json['emailPassword'] as String? ?? '',
+      metaVerifiedStatus: json['metaVerifiedStatus'] as String? ?? '',
       originalImageUrl: json['originalImageUrl'] as String? ?? '',
       thumbnailImageUrl: json['thumbnailImageUrl'] as String? ?? '',
       originalImagePath: json['originalImagePath'] as String? ?? '',
@@ -164,6 +184,10 @@ class IGRequestModel {
       'note': note,
       'password': password,
       'twoFactorKey': twoFactorKey,
+      'cookie': cookie,
+      'email': email,
+      'emailPassword': emailPassword,
+      'metaVerifiedStatus': metaVerifiedStatus,
       'originalImageUrl': originalImageUrl,
       'thumbnailImageUrl': thumbnailImageUrl,
       'originalImagePath': originalImagePath,

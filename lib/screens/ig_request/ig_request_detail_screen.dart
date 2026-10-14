@@ -12,6 +12,8 @@ import '../../widgets/status_chip.dart';
 import '../../utils/date_utils.dart';
 import '../../services/ai_service.dart';
 import '../../utils/otp_helper.dart';
+import '../../services/meta_checker_service.dart';
+import '../../utils/account_parser_helper.dart';
 
 class IGRequestDetailScreen extends StatefulWidget {
   const IGRequestDetailScreen({super.key});
@@ -24,6 +26,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
   final _feedbackController = TextEditingController();
   bool _isSubmitting = false;
   bool _isPasswordObscured = true;
+  bool _isCheckingMeta = false;
   
   String? _aiExtractedName;
   bool _isScanning = false;
@@ -392,7 +395,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
               IconButton(
                 icon: const Icon(Icons.share_outlined),
                 onPressed: () {
-                  final shareText = '${isInstagram ? "Instagram" : "Facebook"}: ${request.instagramUsername}\nPass: ${request.password}\n2FA: ${request.twoFactorKey}';
+                  final shareText = '${isInstagram ? "Instagram" : "Facebook"}: ${request.instagramUsername}\nPass: ${request.password}\n2FA: ${request.twoFactorKey}${request.cookie.isNotEmpty ? "\nCookie: ${request.cookie}" : ""}${request.email.isNotEmpty ? "\nEmail: ${request.email}" : ""}${request.emailPassword.isNotEmpty ? "\nPass Mail: ${request.emailPassword}" : ""}';
                   Clipboard.setData(ClipboardData(text: shareText));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -601,7 +604,7 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                     ),
                   ],
                   // 2. Credentials Card
-                  if (request.password.isNotEmpty || request.twoFactorKey.isNotEmpty) ...[
+                  if (request.password.isNotEmpty || request.twoFactorKey.isNotEmpty || request.cookie.isNotEmpty || request.email.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Card(
                       child: Padding(
@@ -655,6 +658,26 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                 ),
                               ],
                             ],
+                            if (request.email.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              _buildCredentialField(
+                                label: 'Email',
+                                value: request.email,
+                                obscured: false,
+                              ),
+                            ],
+                            if (request.emailPassword.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              _buildCredentialField(
+                                label: 'Mật khẩu Email',
+                                value: request.emailPassword,
+                                obscured: false,
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            _buildCookieCredentialField(request: request),
+                            const SizedBox(height: 14),
+                            _buildMetaVerifiedStatusField(request: request),
                           ],
                         ),
                       ),
@@ -999,6 +1022,488 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCookieCredentialField({
+    required IGRequestModel request,
+  }) {
+    final hasCookie = request.cookie.trim().isNotEmpty;
+    final cookie = request.cookie.trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Cookie',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93), fontWeight: FontWeight.w500),
+            ),
+            Row(
+              children: [
+                InkWell(
+                  onTap: () => _showEditCookieDialog(request),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit_outlined, size: 13, color: Colors.deepPurple),
+                      const SizedBox(width: 3),
+                      Text(
+                        hasCookie ? 'Sửa Cookie' : '+ Thêm Cookie',
+                        style: const TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                if (hasCookie) ...[
+                  const SizedBox(width: 12),
+                  InkWell(
+                    onTap: () {
+                      Navigator.pushNamed(context, '/cookie_facebook_tool', arguments: cookie);
+                    },
+                    child: const Row(
+                      children: [
+                        Icon(Icons.open_in_new, size: 13, color: Colors.blue),
+                        SizedBox(width: 3),
+                        Text(
+                          'Công cụ FB',
+                          style: TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE5E5EA)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  hasCookie
+                      ? (cookie.length > 50 ? '${cookie.substring(0, 50)}...' : cookie)
+                      : '(Chưa có Cookie)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: hasCookie ? 'Courier' : null,
+                    fontStyle: hasCookie ? FontStyle.normal : FontStyle.italic,
+                    color: hasCookie ? const Color(0xFF1C1C1E) : const Color(0xFF8E8E93),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (hasCookie) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: const Icon(
+                    Icons.copy_rounded,
+                    size: 20,
+                    color: Color(0xFF8E8EF8),
+                  ),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: cookie));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã sao chép Cookie vào bộ nhớ tạm.'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetaVerifiedStatusField({required IGRequestModel request}) {
+    Color badgeColor;
+    Color textColor;
+    IconData icon;
+    String label;
+
+    switch (request.metaVerifiedStatus) {
+      case 'pending':
+        badgeColor = const Color(0xFFFFF3CD);
+        textColor = const Color(0xFF856404);
+        icon = Icons.hourglass_top_rounded;
+        label = 'Verification pending (Đang chờ duyệt)';
+        break;
+      case 'needed':
+        badgeColor = const Color(0xFFF8D7DA);
+        textColor = const Color(0xFF721C24);
+        icon = Icons.warning_amber_rounded;
+        label = 'Verification needed (Cần xác minh lại CCCD)';
+        break;
+      case 'active':
+        badgeColor = const Color(0xFFD4EDDA);
+        textColor = const Color(0xFF155724);
+        icon = Icons.verified;
+        label = 'Meta Verified Active (Đã tích xanh)';
+        break;
+      case 'expired':
+        badgeColor = const Color(0xFFE2E3E5);
+        textColor = const Color(0xFF383D41);
+        icon = Icons.key_off_outlined;
+        label = 'Cookie hết hạn / Lỗi phiên';
+        break;
+      case 'not_found':
+        badgeColor = const Color(0xFFE2E3E5);
+        textColor = const Color(0xFF383D41);
+        icon = Icons.help_outline;
+        label = 'Chưa đăng ký gói Meta Verified';
+        break;
+      default:
+        badgeColor = const Color(0xFFE9ECEF);
+        textColor = const Color(0xFF6C757D);
+        icon = Icons.info_outline;
+        label = 'Chưa kiểm tra';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Trạng thái Meta Verified (Subscriptions)',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8E8E93), fontWeight: FontWeight.w500),
+            ),
+            InkWell(
+              onTap: _isCheckingMeta ? null : () => _checkMetaVerified(request),
+              child: Row(
+                children: [
+                  if (_isCheckingMeta) ...[
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+                    ),
+                    const SizedBox(width: 4),
+                  ] else ...[
+                    const Icon(Icons.sync_rounded, size: 13, color: Colors.blue),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    _isCheckingMeta ? 'Đang check...' : 'Kiểm tra ngay',
+                    style: const TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: badgeColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: textColor.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: textColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _checkMetaVerified(IGRequestModel request) async {
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser;
+    if (user == null) return;
+
+    if (request.cookie.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tài khoản chưa có Cookie. Vui lòng bấm "Thêm Cookie" để dán hoặc tự lấy Cookie trước.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _showEditCookieDialog(request);
+      return;
+    }
+
+    setState(() => _isCheckingMeta = true);
+
+    try {
+      final result = await MetaCheckerService.checkMetaVerifiedStatus(cookie: request.cookie);
+
+      String statusKey = '';
+      if (result.type == MetaVerifiedStatusType.pending) {
+        statusKey = 'pending';
+      } else if (result.type == MetaVerifiedStatusType.needed) {
+        statusKey = 'needed';
+      } else if (result.type == MetaVerifiedStatusType.active) {
+        statusKey = 'active';
+      } else if (result.type == MetaVerifiedStatusType.expired) {
+        statusKey = 'expired';
+      } else if (result.type == MetaVerifiedStatusType.notFound) {
+        statusKey = 'not_found';
+      }
+
+      if (statusKey.isNotEmpty) {
+        await firestoreService.updateMetaVerifiedStatus(
+          requestId: request.id,
+          metaVerifiedStatus: statusKey,
+          userId: user.uid,
+        );
+      }
+
+      if (mounted) {
+        setState(() => _isCheckingMeta = false);
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  result.type == MetaVerifiedStatusType.pending
+                      ? Icons.hourglass_top_rounded
+                      : (result.type == MetaVerifiedStatusType.needed
+                          ? Icons.warning_amber_rounded
+                          : (result.type == MetaVerifiedStatusType.active ? Icons.verified : Icons.info_outline)),
+                  color: result.type == MetaVerifiedStatusType.pending
+                      ? Colors.orange
+                      : (result.type == MetaVerifiedStatusType.needed
+                          ? Colors.red
+                          : (result.type == MetaVerifiedStatusType.active ? Colors.green : Colors.blue)),
+                ),
+                const SizedBox(width: 8),
+                Text(result.statusText, style: const TextStyle(fontSize: 16)),
+              ],
+            ),
+            content: Text(result.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCheckingMeta = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi kiểm tra Meta: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditCookieDialog(IGRequestModel request) async {
+    final cookieCtrl = TextEditingController(text: request.cookie);
+    final proxyCtrl = TextEditingController();
+    bool isExtracting = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.cookie_outlined, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Cập nhật Cookie', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Dán chuỗi Cookie mới hoặc bấm "Tự lấy từ 2FA" nếu có TK, MK & 2FA:',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: cookieCtrl,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText: 'c_user=...; xs=... (hoặc dán cả dòng UID|PASS|2FA|COOKIE)',
+                      filled: true,
+                      fillColor: const Color(0xFFF2F2F7),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.all(12),
+                    ),
+                    onChanged: (val) {
+                      if (val.contains('|') || val.contains('\t')) {
+                        final extracted = AccountParserHelper.extractCookieOnly(val);
+                        if (extracted != null && extracted.isNotEmpty) {
+                          cookieCtrl.text = extracted;
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: () async {
+                          final clip = await Clipboard.getData('text/plain');
+                          final text = clip?.text?.trim() ?? '';
+                          if (text.isNotEmpty) {
+                            final extracted = AccountParserHelper.extractCookieOnly(text) ?? text;
+                            setDialogState(() {
+                              cookieCtrl.text = extracted;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.paste_rounded, size: 16),
+                        label: const Text('Dán & Tách', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (request.password.isNotEmpty && request.twoFactorKey.isNotEmpty)
+                        ElevatedButton.icon(
+                          onPressed: isExtracting
+                              ? null
+                              : () async {
+                                  setDialogState(() => isExtracting = true);
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  try {
+                                    final cookie = await MetaCheckerService.loginAndExtractCookie(
+                                      username: request.instagramUsername,
+                                      password: request.password,
+                                      twoFactorKey: request.twoFactorKey,
+                                      proxy: proxyCtrl.text.trim().isNotEmpty ? proxyCtrl.text.trim() : null,
+                                    );
+                                    setDialogState(() {
+                                      cookieCtrl.text = cookie;
+                                      isExtracting = false;
+                                    });
+                                    if (mounted) {
+                                      messenger.showSnackBar(
+                                        const SnackBar(content: Text('Đã tự động lấy Cookie thành công!')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isExtracting = false);
+                                    if (mounted) {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text('Lỗi lấy Cookie: ${e.toString().replaceAll('Exception: ', '')}'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                          icon: isExtracting
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.auto_awesome, size: 15),
+                          label: Text(isExtracting ? 'Đang login...' : 'Tự lấy từ 2FA', style: const TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Proxy riêng cho yêu cầu này (Tùy chọn, ví dụ IP:Port hoặc IP:Port:User:Pass):',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF888888)),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: proxyCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Để trống nếu dùng mạng máy tính bình thường',
+                      hintStyle: const TextStyle(fontSize: 12),
+                      filled: true,
+                      fillColor: const Color(0xFFF2F2F7),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      prefixIcon: const Icon(Icons.shield_outlined, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setDialogState(() {
+                    cookieCtrl.clear();
+                  });
+                },
+                child: const Text('Xóa trống', style: TextStyle(color: Colors.red)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Hủy'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final newCookie = cookieCtrl.text.trim();
+                  final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+                  final authService = Provider.of<AuthService>(context, listen: false);
+                  final user = authService.currentUser;
+                  if (user == null) return;
+
+                  final messenger = ScaffoldMessenger.of(context);
+                  final nav = Navigator.of(ctx);
+
+                  await firestoreService.updateCookieOnly(
+                    requestId: request.id,
+                    cookie: newCookie,
+                    userId: user.uid,
+                  );
+
+                  if (mounted) {
+                    nav.pop();
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('Đã cập nhật Cookie thành công!')),
+                    );
+                  }
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

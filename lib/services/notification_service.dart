@@ -24,26 +24,33 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> _initLocalNotifications() async {
-    const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInitSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
+    try {
+      if (!kIsWeb && Platform.isWindows) {
+        return;
+      }
+      const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosInitSettings = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
 
-    const initSettings = InitializationSettings(
-      android: androidInitSettings,
-      iOS: iosInitSettings,
-    );
+      const initSettings = InitializationSettings(
+        android: androidInitSettings,
+        iOS: iosInitSettings,
+      );
 
-    await _localNotificationsPlugin.initialize(
-      settings: initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        if (response.payload != null && _onNotificationTap != null) {
-          _onNotificationTap!(response.payload!);
-        }
-      },
-    );
+      await _localNotificationsPlugin.initialize(
+        settings: initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          if (response.payload != null && _onNotificationTap != null) {
+            _onNotificationTap!(response.payload!);
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('NotificationService init error: $e');
+    }
   }
 
   void setOnNotificationTap(Function(String) callback) {
@@ -51,7 +58,7 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<bool> requestNotificationPermission() async {
-    if (kIsWeb) {
+    if (kIsWeb || (!kIsWeb && Platform.isWindows)) {
       _hasPermission = true;
     } else if (Platform.isIOS) {
       final result = await _localNotificationsPlugin
@@ -78,26 +85,33 @@ class NotificationService extends ChangeNotifier {
 
   /// Hiển thị Local Notification (foreground)
   Future<void> showLocalNotification(String title, String body, String payload) async {
-    const androidDetails = AndroidNotificationDetails(
-      'igcheck_main_channel',
-      'IGCheck Notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    try {
+      if (!kIsWeb && Platform.isWindows) {
+        return;
+      }
+      const androidDetails = AndroidNotificationDetails(
+        'igcheck_main_channel',
+        'IGCheck Notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
-    await _localNotificationsPlugin.show(
-      id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
-      title: title,
-      body: body,
-      notificationDetails: details,
-      payload: payload,
-    );
+      await _localNotificationsPlugin.show(
+        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint('showLocalNotification error: $e');
+    }
   }
 
   /// Gửi thông báo Telegram

@@ -13,17 +13,29 @@ class OtpHelper {
 
     try {
       // Generate TOTP code locally using RFC 6238 implementation
-      final code = OTP.generateTOTPCodeString(
+      return OTP.generateTOTPCodeString(
         cleanSecret,
         DateTime.now().millisecondsSinceEpoch,
         length: 6,
         interval: 30,
         algorithm: Algorithm.SHA1,
-        isGoogle: true, // Crucial: standard 2FA secrets are Base32 encoded (Google Authenticator style)
+        isGoogle: true,
       );
-      return code;
-    } catch (e) {
-      throw Exception('Không thể giải mã khóa 2FA. Vui lòng kiểm tra lại định dạng khóa.');
+    } catch (_) {
+      try {
+        // Fallback for common seller typos: 0 -> O, 1 -> I, 8 -> B
+        final normalized = cleanSecret.replaceAll('0', 'O').replaceAll('1', 'I').replaceAll('8', 'B');
+        return OTP.generateTOTPCodeString(
+          normalized,
+          DateTime.now().millisecondsSinceEpoch,
+          length: 6,
+          interval: 30,
+          algorithm: Algorithm.SHA1,
+          isGoogle: true,
+        );
+      } catch (e) {
+        throw Exception('Không thể giải mã khóa 2FA. Vui lòng kiểm tra lại định dạng khóa.');
+      }
     }
   }
 

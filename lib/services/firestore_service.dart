@@ -251,6 +251,10 @@ class FirestoreService extends ChangeNotifier {
     required String note,
     String password = '',
     String twoFactorKey = '',
+    String cookie = '',
+    String email = '',
+    String emailPassword = '',
+    String metaVerifiedStatus = '',
     required String imageUrl,
     required String thumbnailImageUrl,
     String originalImagePath = '',
@@ -269,6 +273,10 @@ class FirestoreService extends ChangeNotifier {
       note: note,
       password: password,
       twoFactorKey: twoFactorKey,
+      cookie: cookie,
+      email: email,
+      emailPassword: emailPassword,
+      metaVerifiedStatus: metaVerifiedStatus,
       originalImageUrl: imageUrl,
       thumbnailImageUrl: thumbnailImageUrl,
       originalImagePath: originalImagePath.isNotEmpty ? originalImagePath : 'ig_requests/$pairId/req_${DateTime.now().millisecondsSinceEpoch}/original.jpg',
@@ -305,6 +313,10 @@ class FirestoreService extends ChangeNotifier {
     required String note,
     String password = '',
     String twoFactorKey = '',
+    String? cookie,
+    String? email,
+    String? emailPassword,
+    String? metaVerifiedStatus,
     String? imageUrl,
     String? thumbnailImageUrl,
     int? imageSizeBytes,
@@ -328,6 +340,10 @@ class FirestoreService extends ChangeNotifier {
         'lastAction': lastAction,
         'updatedAt': FieldValue.serverTimestamp(),
       };
+      if (cookie != null) updateData['cookie'] = cookie;
+      if (email != null) updateData['email'] = email;
+      if (emailPassword != null) updateData['emailPassword'] = emailPassword;
+      if (metaVerifiedStatus != null) updateData['metaVerifiedStatus'] = metaVerifiedStatus;
       if (imageUrl != null) updateData['originalImageUrl'] = imageUrl;
       if (thumbnailImageUrl != null) updateData['thumbnailImageUrl'] = thumbnailImageUrl;
       if (imageSizeBytes != null) updateData['imageSizeBytes'] = imageSizeBytes;
@@ -346,6 +362,10 @@ class FirestoreService extends ChangeNotifier {
         note: note,
         password: password,
         twoFactorKey: twoFactorKey,
+        cookie: cookie ?? existing.cookie,
+        email: email ?? existing.email,
+        emailPassword: emailPassword ?? existing.emailPassword,
+        metaVerifiedStatus: metaVerifiedStatus ?? existing.metaVerifiedStatus,
         originalImageUrl: imageUrl ?? existing.originalImageUrl,
         thumbnailImageUrl: thumbnailImageUrl ?? existing.thumbnailImageUrl,
         imageSizeBytes: imageSizeBytes ?? existing.imageSizeBytes,
@@ -360,6 +380,58 @@ class FirestoreService extends ChangeNotifier {
       _requests[index] = updated;
       _notifySubscriptions();
       notifyListeners();
+    }
+  }
+
+  Future<void> updateCookieOnly({
+    required String requestId,
+    required String cookie,
+    required String userId,
+  }) async {
+    if (useFirebase) {
+      await FirebaseFirestore.instance.collection('requests').doc(requestId).update({
+        'cookie': cookie,
+        'lastUpdatedBy': userId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      final index = _requests.indexWhere((r) => r.id == requestId);
+      if (index != -1) {
+        final existing = _requests[index];
+        _requests[index] = existing.copyWith(
+          cookie: cookie,
+          lastUpdatedBy: userId,
+          updatedAt: DateTime.now(),
+        );
+        _notifySubscriptions();
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> updateMetaVerifiedStatus({
+    required String requestId,
+    required String metaVerifiedStatus,
+    required String userId,
+  }) async {
+    if (useFirebase) {
+      await FirebaseFirestore.instance.collection('requests').doc(requestId).update({
+        'metaVerifiedStatus': metaVerifiedStatus,
+        'lastUpdatedBy': userId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      final index = _requests.indexWhere((r) => r.id == requestId);
+      if (index != -1) {
+        final existing = _requests[index];
+        _requests[index] = existing.copyWith(
+          metaVerifiedStatus: metaVerifiedStatus,
+          lastUpdatedBy: userId,
+          updatedAt: DateTime.now(),
+        );
+        _notifySubscriptions();
+        notifyListeners();
+      }
     }
   }
 

@@ -82,7 +82,27 @@ class DownloadService {
         );
       }
 
-      // Save the file to gallery
+      // Save the file to gallery or Windows Pictures
+      if (!kIsWeb && Platform.isWindows) {
+        final picturesPath = Platform.environment['USERPROFILE'] != null
+            ? '${Platform.environment['USERPROFILE']}\\Pictures\\IGCheck'
+            : tempDir.path;
+        final dir = Directory(picturesPath);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        final savePath = '$picturesPath\\${DateTime.now().millisecondsSinceEpoch}$extension';
+        await File(tempPath).copy(savePath);
+        try {
+          final file = File(tempPath);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (_) {}
+        onStatusChanged('Đã lưu ảnh vào: $savePath');
+        return true;
+      }
+
       final result = await ImageGallerySaver.saveFile(tempPath);
 
       // Delete the temporary file after saving

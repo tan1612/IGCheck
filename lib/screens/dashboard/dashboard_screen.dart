@@ -9,6 +9,7 @@ import '../../widgets/app_button.dart';
 import '../inbox/inbox_screen.dart';
 import '../sent/sent_screen.dart';
 import '../profile/profile_screen.dart';
+import '../tools/instagram_cookie_verify_screen.dart';
 import 'filtered_requests_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -131,6 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final List<Widget> _tabs = [
     const DashboardHome(),
     const InboxScreen(),
+    const InstagramCookieVerifyScreen(isTab: true),
     const SentScreen(),
     const ProfileScreen(),
   ];
@@ -158,8 +160,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.white,
         selectedItemColor: theme.primaryColor,
         unselectedItemColor: const Color(0xFF8E8E93),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 11),
         elevation: 8,
         items: const [
           BottomNavigationBarItem(
@@ -171,6 +173,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Icon(Icons.inbox_outlined),
             activeIcon: Icon(Icons.inbox),
             label: 'Hộp thư đến',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.verified_user_outlined),
+            activeIcon: Icon(Icons.verified_user),
+            label: 'Xác minh',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.send_outlined),
@@ -314,13 +321,42 @@ class _DashboardHomeState extends State<DashboardHome> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Prominent Add Account Button
-                  AppButton(
-                    text: 'Thêm tài khoản mới',
-                    icon: Icons.person_add_alt_1_outlined,
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/create_ig_request');
-                    },
+                  // Prominent Action Buttons: Thêm tài khoản & Xác minh Cookie
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          text: 'Thêm hồ sơ',
+                          icon: Icons.person_add_alt_1_outlined,
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/create_ig_request');
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFD946EF), width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: const Color(0xFFFDF2F8),
+                          ),
+                          icon: const Icon(Icons.verified_user_rounded, color: Color(0xFFD946EF), size: 18),
+                          label: const Text(
+                            'Xác minh Cookie',
+                            style: TextStyle(
+                              color: Color(0xFFD946EF),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/instagram_cookie_verify_tool');
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 20),
 

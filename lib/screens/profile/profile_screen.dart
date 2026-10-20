@@ -1,3 +1,5 @@
+import 'dart:io' show Platform, Process;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -444,6 +446,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
+                              color: const Color(0xFFD946EF).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.verified_user_rounded,
+                              color: Color(0xFFD946EF),
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Xác minh Instagram qua Cookie',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1C1C1E),
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Tải ảnh giấy tờ xác minh danh tính chỉ cần Cookie',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF8E8E93),
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right,
+                            color: Color(0xFFC7C7CC),
+                          ),
+                          onTap: () {
+                            Navigator.pushNamed(context, '/instagram_cookie_verify_tool');
+                          },
+                        ),
+                        const Divider(height: 12),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
                               color: theme.primaryColor.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
@@ -514,6 +554,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           onTap: () => _showNotepadConfigDialog(context),
                         ),
+                        if (!kIsWeb && Platform.isWindows) ...[
+                          const Divider(height: 12),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.videocam_outlined,
+                                color: Colors.teal,
+                                size: 24,
+                              ),
+                            ),
+                            title: const Text(
+                              'Camera Ảo Giả Lập (LDPlayer / Nox)',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1C1C1E),
+                              ),
+                            ),
+                            subtitle: const Text(
+                              'Chiếu ảnh xác minh (CCCD / Mặt) vào camera giả lập',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF8E8E93),
+                              ),
+                            ),
+                            trailing: const Icon(
+                              Icons.open_in_new,
+                              color: Color(0xFFC7C7CC),
+                            ),
+                            onTap: () {
+                              Process.run('cmd.exe', ['/c', 'start', '', 'd:\\IGCheck\\virtual_camera\\Chay_Camera_Ao.bat']);
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),

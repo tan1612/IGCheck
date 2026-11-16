@@ -18,6 +18,7 @@ import '../../services/ai_service.dart';
 import '../../utils/otp_helper.dart';
 import '../../services/meta_checker_service.dart';
 import '../../utils/account_parser_helper.dart';
+import '../../widgets/gemini_key_dialog.dart';
 
 class IGRequestDetailScreen extends StatefulWidget {
   const IGRequestDetailScreen({super.key});
@@ -380,6 +381,17 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
 
   Future<void> _scanNameFromFile(XFile file, IGRequestModel request) async {
     if (!mounted) return;
+
+    if (!AIService().isConfigured) {
+      showGeminiApiKeyDialog(
+        context,
+        onKeySaved: () {
+          _scanNameFromFile(file, request);
+        },
+      );
+      return;
+    }
+
     setState(() {
       _isScanning = true;
       _aiExtractedName = null;
@@ -423,6 +435,16 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     if (request.originalImageUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Chưa có ảnh giấy tờ để đọc. Vui lòng bấm "Thêm giấy tờ" trước!')),
+      );
+      return;
+    }
+
+    if (!AIService().isConfigured) {
+      showGeminiApiKeyDialog(
+        context,
+        onKeySaved: () {
+          _scanNameAI();
+        },
       );
       return;
     }
@@ -791,6 +813,27 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                                           ),
                                           onPressed: _isScanning ? null : _scanNameAI,
                                         ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(Icons.vpn_key_outlined, size: 20, color: Colors.purple),
+                                        tooltip: 'Cài đặt Gemini API Key',
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: Colors.purple.shade50,
+                                          padding: const EdgeInsets.all(10),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(8),
+                                            side: BorderSide(color: Colors.purple.shade200),
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          showGeminiApiKeyDialog(
+                                            context,
+                                            onKeySaved: () {
+                                              if (request.originalImageUrl.isNotEmpty) _scanNameAI();
+                                            },
+                                          );
+                                        },
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(

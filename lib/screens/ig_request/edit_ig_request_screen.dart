@@ -12,6 +12,7 @@ import '../../services/notification_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/ai_service.dart';
 import '../../services/meta_checker_service.dart';
+import '../../widgets/gemini_key_dialog.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
 import '../../utils/validators.dart';
@@ -287,6 +288,16 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
 
   Future<void> _scanNameAI() async {
     if (_isScanning || _selectedFile == null) return;
+
+    if (!AIService().isConfigured) {
+      showGeminiApiKeyDialog(
+        context,
+        onKeySaved: () {
+          _scanNameAI();
+        },
+      );
+      return;
+    }
     
     setState(() {
       _isScanning = true;
@@ -785,22 +796,45 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
                               : Image.file(File(_selectedFile!.path), fit: BoxFit.cover, width: double.infinity, height: 150),
                         ),
                         const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            icon: const Icon(Icons.face_retouching_natural, size: 18),
-                            label: const Text('AI đọc họ tên'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.purple.shade50,
-                              foregroundColor: Colors.purple,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.face_retouching_natural, size: 18),
+                                label: const Text('AI đọc họ tên'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.purple.shade50,
+                                  foregroundColor: Colors.purple,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                onPressed: _isScanning ? null : _scanNameAI,
                               ),
                             ),
-                            onPressed: _isScanning ? null : _scanNameAI,
-                          ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.vpn_key_outlined, size: 20, color: Colors.purple),
+                              tooltip: 'Cài đặt Gemini API Key',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.purple.shade50,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Colors.purple.shade200),
+                                ),
+                              ),
+                              onPressed: () {
+                                showGeminiApiKeyDialog(
+                                  context,
+                                  onKeySaved: () {
+                                    if (_selectedFile != null) _scanNameAI();
+                                  },
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/auth_service.dart';
 import '../../services/image_service.dart';
 import '../../services/storage_service.dart';
@@ -449,6 +450,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () async {
+                            const url = 'https://aistudio.google.com/app/apikey';
+                            await Clipboard.setData(const ClipboardData(text: url));
+                            try {
+                              final uri = Uri.parse(url);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            } catch (_) {}
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Đã sao chép liên kết Google AI Studio: https://aistudio.google.com/app/apikey'),
+                                  backgroundColor: Colors.purple,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(Icons.open_in_new, size: 14, color: Colors.purple),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Lấy API Key miễn phí tại aistudio.google.com',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.purple,
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

@@ -34,6 +34,14 @@ class AIService {
     }
   }
 
+  String get currentApiKey => _apiKey;
+
+  String get maskedApiKey {
+    if (!isConfigured) return '';
+    if (_apiKey.length <= 8) return '***';
+    return '${_apiKey.substring(0, 4)}...${_apiKey.substring(_apiKey.length - 4)}';
+  }
+
   bool get isConfigured =>
       _apiKey.isNotEmpty && _apiKey != 'NHET_KEY_CUA_NI_VAO_DAY';
 

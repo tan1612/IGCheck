@@ -9,6 +9,10 @@ class AIConstants {
   static const List<String> modelCandidates = [
     primaryModel,
     fallbackModel,
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-flash',
   ];
 
   /// Thời gian tối đa thiết lập kết nối tới Gemini API (15-20 giây)

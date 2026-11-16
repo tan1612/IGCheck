@@ -29,5 +29,21 @@ void main() {
     expect(AIConstants.timeoutErrorMessage, contains('Kết nối mạng chậm, vui lòng thử lại'));
     expect(AIConstants.networkErrorMessage, contains('vui lòng thử lại'));
   });
+
+  test('AIService session key and masking operations', () {
+    final aiService = AIService();
+    aiService.setApiKeyForSession('');
+    expect(aiService.currentApiKey, isEmpty);
+    expect(aiService.isConfigured, isFalse);
+    expect(aiService.maskedApiKey, isEmpty);
+
+    aiService.setApiKeyForSession('AIzaSyDZT2DntFRJifQWayDgm2yvMFN59tsDp94');
+    expect(aiService.currentApiKey, equals('AIzaSyDZT2DntFRJifQWayDgm2yvMFN59tsDp94'));
+    expect(aiService.isConfigured, isTrue);
+    expect(aiService.maskedApiKey, equals('AIza...Dp94'));
+
+    aiService.setApiKeyForSession('');
+    expect(aiService.isConfigured, isFalse);
+  });
 }
 

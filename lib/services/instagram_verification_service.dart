@@ -32,7 +32,9 @@ class InstagramVerifyResult {
     this.rawResponse,
   });
 
-  bool get isSuccess => status == InstagramVerifyStatus.success || status == InstagramVerifyStatus.inReview;
+  bool get isSuccess =>
+      status == InstagramVerifyStatus.success ||
+      status == InstagramVerifyStatus.inReview;
 }
 
 class InstagramVerificationService {
@@ -50,7 +52,9 @@ class InstagramVerificationService {
         format: CompressFormat.jpeg,
       );
       if (result.isNotEmpty && result.length < bytes.length) {
-        debugPrint('⚡ Đã nén ảnh giấy tờ từ ${(bytes.length / 1024).toStringAsFixed(1)}KB -> ${(result.length / 1024).toStringAsFixed(1)}KB');
+        debugPrint(
+          '⚡ Đã nén ảnh giấy tờ từ ${(bytes.length / 1024).toStringAsFixed(1)}KB -> ${(result.length / 1024).toStringAsFixed(1)}KB',
+        );
         return result;
       }
     } catch (e) {
@@ -75,20 +79,23 @@ class InstagramVerificationService {
     return tokens;
   }
 
-  /// Thực hiện quy trình xác minh tài khoản Instagram bằng Cookie và Ảnh giấy tờ
+  /// Thực hiện quy trình xác minh tài khoản Instagram hoặc Facebook bằng Cookie và Ảnh giấy tờ
   static Future<InstagramVerifyResult> submitVerification({
     required String cookie,
     required List<Uint8List> documentImages,
+    String platform = 'instagram', // 'instagram' or 'facebook'
     String? proxy,
     String? customEndpoint,
     Function(String stepMessage)? onProgress,
   }) async {
+    final isFacebook = platform.toLowerCase() == 'facebook';
+    final platformName = isFacebook ? 'Facebook' : 'Instagram';
     final cleanCookie = cookie.trim();
     if (cleanCookie.isEmpty) {
-      return const InstagramVerifyResult(
+      return InstagramVerifyResult(
         status: InstagramVerifyStatus.error,
         title: 'Thiếu Cookie',
-        message: 'Vui lòng nhập chuỗi Cookie Instagram hợp lệ để bắt đầu.',
+        message: 'Vui lòng nhập chuỗi Cookie $platformName hợp lệ để bắt đầu.',
       );
     }
 
@@ -96,21 +103,36 @@ class InstagramVerificationService {
       return const InstagramVerifyResult(
         status: InstagramVerifyStatus.error,
         title: 'Thiếu ảnh giấy tờ',
-        message: 'Vui lòng chọn ít nhất 1 ảnh giấy tờ tùy thân (CCCD / Bằng lái / Hộ chiếu).',
+        message:
+            'Vui lòng chọn ít nhất 1 ảnh giấy tờ tùy thân (CCCD / Bằng lái / Hộ chiếu).',
       );
     }
 
-    onProgress?.call('Đang phân tích Cookie Instagram...');
+    onProgress?.call('Đang phân tích Cookie $platformName...');
     final tokens = parseCookieTokens(cleanCookie);
     final sessionId = tokens['sessionid'];
     final csrfToken = tokens['csrftoken'] ?? '';
-    final dsUserId = tokens['ds_user_id'] ?? AccountParserHelper.extractUidFromCookie(cleanCookie);
+    final dsUserId =
+        tokens['ds_user_id'] ??
+        tokens['c_user'] ??
+        AccountParserHelper.extractUidFromCookie(cleanCookie);
 
-    if (sessionId == null || sessionId.isEmpty) {
+    if (!isFacebook && (sessionId == null || sessionId.isEmpty)) {
       return const InstagramVerifyResult(
         status: InstagramVerifyStatus.sessionExpired,
         title: 'Cookie không hợp lệ',
-        message: 'Cookie không chứa sessionid. Vui lòng lấy cookie đầy đủ từ trình duyệt đã đăng nhập Instagram.',
+        message:
+            'Cookie không chứa sessionid. Vui lòng lấy cookie đầy đủ từ trình duyệt đã đăng nhập Instagram.',
+      );
+    }
+
+    if (isFacebook &&
+        ((tokens['c_user'] ?? '').isEmpty || (tokens['xs'] ?? '').isEmpty)) {
+      return const InstagramVerifyResult(
+        status: InstagramVerifyStatus.sessionExpired,
+        title: 'Cookie Facebook không hợp lệ',
+        message:
+            'Cookie cần có đủ c_user và xs. Vui lòng lấy cookie đầy đủ từ trình duyệt đã đăng nhập Facebook.',
       );
     }
 
@@ -121,17 +143,30 @@ class InstagramVerificationService {
         cookie: cleanCookie,
         documentImages: documentImages,
         tokens: tokens,
+        platform: platform,
         proxy: proxy,
         onProgress: onProgress,
       );
     }
 
+    // Facebook must use its real browser wizard; never post its documents to IG.
+    if (isFacebook) {
+      return const InstagramVerifyResult(
+        status: InstagramVerifyStatus.error,
+        title: 'Cần trình duyệt xác minh Facebook',
+        message:
+            'Hãy dùng luồng tự động trong màn hình xác minh Facebook trên Windows/iOS.',
+      );
+    }
+
     // Khởi tạo Dio với Cookie và Proxy (nếu có)
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 25),
-      validateStatus: (status) => status != null && status < 500,
-    ));
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 25),
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
 
     if (proxy != null && proxy.trim().isNotEmpty) {
       MetaCheckerService.applyProxy(dio, proxy.trim());
@@ -140,7 +175,8 @@ class InstagramVerificationService {
     final headers = {
       'cookie': cleanCookie,
       'user-agent': _defaultUserAgent,
-      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'accept':
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
       'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
       'x-ig-app-id': '936619743392459',
       'x-csrftoken': csrfToken,
@@ -148,11 +184,19 @@ class InstagramVerificationService {
       'referer': 'https://www.instagram.com/',
     };
 
+    final checkUrl = isFacebook
+        ? 'https://m.facebook.com/'
+        : 'https://www.instagram.com/challenge/';
+    if (isFacebook) {
+      headers['referer'] = 'https://m.facebook.com/';
+      headers.remove('x-ig-app-id');
+    }
+
     try {
       // BƯỚC 1: Kiểm tra trạng thái phiên và tìm link checkpoint / xác minh
-      onProgress?.call('Đang kiểm tra trạng thái tài khoản Instagram...');
+      onProgress?.call('Đang kiểm tra trạng thái tài khoản $platformName...');
       final checkResponse = await dio.get(
-        'https://www.instagram.com/challenge/',
+        checkUrl,
         options: Options(headers: headers, followRedirects: true),
       );
 
@@ -161,16 +205,35 @@ class InstagramVerificationService {
 
       // Kiểm tra nếu cookie bị văng / hết hạn
       if (finalUrl.contains('/accounts/login') ||
+          finalUrl.contains('/login') ||
+          finalUrl.contains('login.php') ||
           bodyStr.contains('name="login"') ||
           bodyStr.contains('id="login_form"') ||
           checkResponse.statusCode == 401 ||
           checkResponse.statusCode == 403) {
         return InstagramVerifyResult(
           status: InstagramVerifyStatus.sessionExpired,
-          title: 'Cookie đã hết hạn',
-          message: 'Phiên đăng nhập (sessionid) đã hết hạn hoặc bị Instagram đăng xuất. Vui lòng lấy lại Cookie mới.',
+          title: 'Cookie $platformName đã hết hạn',
+          message:
+              'Phiên đăng nhập đã hết hạn hoặc bị đăng xuất. Vui lòng lấy lại Cookie mới.',
           userId: dsUserId,
         );
+      }
+
+      // Đối với Facebook: kiểm tra các link checkpoint / serialized_state
+      if (isFacebook) {
+        if (finalUrl.contains('serialized_state') ||
+            finalUrl.contains('renderscreen/msite') ||
+            finalUrl.contains('/checkpoint/')) {
+          return InstagramVerifyResult(
+            status: InstagramVerifyStatus.checkpointFound,
+            title: 'Đã lấy link xác minh Facebook',
+            message:
+                'Tài khoản Facebook đang ở màn hình xác minh danh tính. Bạn có thể mở trực tiếp link hoặc sao chép để hoàn tất trên trình duyệt.',
+            checkpointUrl: finalUrl,
+            userId: dsUserId,
+          );
+        }
       }
 
       // BƯỚC 2: Nén các ảnh giấy tờ
@@ -200,7 +263,9 @@ class InstagramVerificationService {
       }
 
       // Thử submit tới endpoint challenge hiện hành của Instagram
-      final submitUrl = finalUrl.contains('/challenge/') ? finalUrl : 'https://i.instagram.com/api/v1/challenge/';
+      final submitUrl = finalUrl.contains('/challenge/')
+          ? finalUrl
+          : 'https://i.instagram.com/api/v1/challenge/';
       final submitResponse = await dio.post(
         submitUrl,
         data: FormData.fromMap(formDataMap),
@@ -219,29 +284,35 @@ class InstagramVerificationService {
         return InstagramVerifyResult(
           status: InstagramVerifyStatus.success,
           title: 'Xác minh thành công',
-          message: 'Đã gửi ảnh giấy tờ lên hệ thống thành công! Hồ sơ đang được Meta tiếp nhận xét duyệt.',
+          message:
+              'Đã gửi ảnh giấy tờ lên hệ thống thành công! Hồ sơ đang được Meta tiếp nhận xét duyệt.',
           userId: dsUserId,
           checkpointUrl: finalUrl.contains('/challenge/') ? finalUrl : null,
         );
       }
 
       // Nếu tài khoản đang có đường dẫn checkpoint dạng serialized_state hoặc msite
-      if (finalUrl.contains('challenge') || finalUrl.contains('checkpoint') || finalUrl.contains('serialized_state')) {
+      if (finalUrl.contains('challenge') ||
+          finalUrl.contains('checkpoint') ||
+          finalUrl.contains('serialized_state')) {
         return InstagramVerifyResult(
           status: InstagramVerifyStatus.checkpointFound,
           title: 'Đã lấy link xác minh',
-          message: 'Tài khoản đang ở màn hình xác minh danh tính. Bạn có thể mở trực tiếp link hoặc sao chép để hoàn tất trên trình duyệt.',
+          message:
+              'Tài khoản đang ở màn hình xác minh danh tính. Bạn có thể mở trực tiếp link hoặc sao chép để hoàn tất trên trình duyệt.',
           checkpointUrl: finalUrl,
           userId: dsUserId,
         );
       }
 
       // Trường hợp tài khoản hoạt động bình thường, không yêu cầu checkpoint
-      if (finalUrl == 'https://www.instagram.com/' || finalUrl.contains('/feed/')) {
+      if (finalUrl == 'https://www.instagram.com/' ||
+          finalUrl.contains('/feed/')) {
         return InstagramVerifyResult(
           status: InstagramVerifyStatus.success,
           title: 'Tài khoản hoạt động',
-          message: 'Tài khoản đang hoạt động bình thường và không bị khóa checkpoint. Đã gửi thông tin hồ sơ thành công.',
+          message:
+              'Tài khoản đang hoạt động bình thường và không bị khóa checkpoint. Đã gửi thông tin hồ sơ thành công.',
           userId: dsUserId,
         );
       }
@@ -249,7 +320,8 @@ class InstagramVerificationService {
       return InstagramVerifyResult(
         status: InstagramVerifyStatus.inReview,
         title: 'Đã gửi thông tin',
-        message: 'Yêu cầu xác minh đã được xử lý. Vui lòng theo dõi trạng thái hộp thư hoặc email đăng ký tài khoản.',
+        message:
+            'Yêu cầu xác minh đã được xử lý. Vui lòng theo dõi trạng thái hộp thư hoặc email đăng ký tài khoản.',
         userId: dsUserId,
         checkpointUrl: finalUrl,
       );
@@ -270,19 +342,23 @@ class InstagramVerificationService {
     required String cookie,
     required List<Uint8List> documentImages,
     required Map<String, String> tokens,
+    required String platform,
     String? proxy,
     Function(String stepMessage)? onProgress,
   }) async {
     onProgress?.call('Đang gửi dữ liệu tới API Server riêng: $endpoint...');
     try {
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 40),
-      ));
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 40),
+        ),
+      );
 
       final formDataMap = <String, dynamic>{
         'cookie': cookie,
-        'user_id': tokens['ds_user_id'] ?? '',
+        'user_id': tokens['ds_user_id'] ?? tokens['c_user'] ?? '',
+        'platform': platform,
         'photo_count': documentImages.length,
       };
 
@@ -298,15 +374,20 @@ class InstagramVerificationService {
         );
       }
 
-      final response = await dio.post(endpoint, data: FormData.fromMap(formDataMap));
+      final response = await dio.post(
+        endpoint,
+        data: FormData.fromMap(formDataMap),
+      );
       if (response.statusCode == 200) {
         final data = response.data;
-        final msg = data is Map ? (data['message'] ?? data['msg'] ?? 'Đã xác minh thành công!') : response.data.toString();
+        final msg = data is Map
+            ? (data['message'] ?? data['msg'] ?? 'Đã xác minh thành công!')
+            : response.data.toString();
         return InstagramVerifyResult(
           status: InstagramVerifyStatus.success,
           title: 'Xác minh thành công',
           message: msg.toString(),
-          userId: tokens['ds_user_id'],
+          userId: tokens['ds_user_id'] ?? tokens['c_user'],
         );
       } else {
         return InstagramVerifyResult(

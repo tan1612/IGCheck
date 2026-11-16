@@ -7,24 +7,40 @@ import 'package:dio/dio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/instagram_verification_service.dart';
 import '../../utils/account_parser_helper.dart';
+import 'facebook_verification_browser_screen.dart';
+import '../../services/ai_service.dart';
+import '../../models/document_profile_name.dart';
 
 class InstagramCookieVerifyScreen extends StatefulWidget {
   final bool isTab;
   const InstagramCookieVerifyScreen({super.key, this.isTab = false});
 
   @override
-  State<InstagramCookieVerifyScreen> createState() => _InstagramCookieVerifyScreenState();
+  State<InstagramCookieVerifyScreen> createState() =>
+      _InstagramCookieVerifyScreenState();
 }
 
-class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScreen> {
+class _InstagramCookieVerifyScreenState
+    extends State<InstagramCookieVerifyScreen> {
   final _cookieController = TextEditingController();
   final _proxyController = TextEditingController();
   final _customEndpointController = TextEditingController();
+  final _geminiKeyController = TextEditingController();
   final _picker = ImagePicker();
 
   int _photoCount = 1; // 1 or 2
   Uint8List? _frontImageBytes;
   Uint8List? _backImageBytes;
+  Uint8List? _avatarImageBytes;
+  Uint8List? _nameImage;
+  DocumentProfileName? _profileName;
+  bool _updateNameBeforeSubmit = false;
+  bool _updateAvatarBeforeSubmit = false;
+  bool _isReadingName = false;
+
+  String _platform = 'instagram'; // 'instagram' or 'facebook'
+  String _documentType = 'national_id';
+  bool _isInitialized = false;
 
   bool _isLoading = false;
   String? _progressMessage;
@@ -32,10 +48,23 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
   bool _showAdvanced = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isInitialized) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is String && (args == 'facebook' || args == 'instagram')) {
+        _platform = args;
+      }
+      _isInitialized = true;
+    }
+  }
+
+  @override
   void dispose() {
     _cookieController.dispose();
     _proxyController.dispose();
     _customEndpointController.dispose();
+    _geminiKeyController.dispose();
     super.dispose();
   }
 
@@ -43,7 +72,11 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     showCupertinoModalPopup(
       context: context,
       builder: (ctx) => CupertinoActionSheet(
-        title: Text(isFront ? 'Chọn ảnh giấy tờ (Mặt trước)' : 'Chọn ảnh giấy tờ (Mặt sau)'),
+        title: Text(
+          isFront
+              ? 'Chọn ảnh giấy tờ (Mặt trước)'
+              : 'Chọn ảnh giấy tờ (Mặt sau)',
+        ),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () {
@@ -70,6 +103,7 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
   }
 
   Future<void> _getImageFromSource(ImageSource source, bool isFront) async {
+    if (_isLoading || _isReadingName) return;
     try {
       final picked = await _picker.pickImage(
         source: source,
@@ -82,6 +116,8 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
         setState(() {
           if (isFront) {
             _frontImageBytes = bytes;
+            _profileName = null;
+            _nameImage = null;
           } else {
             _backImageBytes = bytes;
           }
@@ -91,20 +127,90 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi chọn ảnh: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Lỗi chọn ảnh: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
   void _removeImage(bool isFront) {
+    if (_isLoading || _isReadingName) return;
     setState(() {
       if (isFront) {
         _frontImageBytes = null;
+        _profileName = null;
+        _nameImage = null;
       } else {
         _backImageBytes = null;
       }
     });
+  }
+
+  Future<void> _pickAvatar() async {
+    if (_isLoading || _isReadingName) return;
+    try {
+      final image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2000,
+        maxHeight: 2000,
+        imageQuality: 90,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+      if (mounted) setState(() => _avatarImageBytes = bytes);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không mở được ảnh avatar.')),
+        );
+      }
+    }
+  }
+
+  Future<DocumentProfileName> _loadProfileName() async {
+    final image = _frontImageBytes;
+    if (image == null) {
+      throw StateError('Hãy chọn ảnh giấy tờ mặt trước trước khi đọc tên.');
+    }
+    if (identical(_nameImage, image) && _profileName != null) {
+      return _profileName!;
+    }
+    if (_geminiKeyController.text.trim().isNotEmpty) {
+      AIService().setApiKeyForSession(_geminiKeyController.text);
+    }
+    final name = await AIService().extractProfileNameFromDocument(image);
+    if (!mounted || !identical(_frontImageBytes, image)) {
+      throw StateError('Ảnh giấy tờ đã thay đổi; hãy đọc tên lại từ ảnh mới.');
+    }
+    setState(() {
+      _profileName = name;
+      _nameImage = image;
+    });
+    return name;
+  }
+
+  Future<void> _previewDocumentName() async {
+    if (_isLoading || _isReadingName) return;
+    setState(() => _isReadingName = true);
+    try {
+      await _loadProfileName();
+    } catch (e) {
+      final message = e is StateError
+          ? e.message.toString()
+          : e is FormatException
+          ? e.message
+          : 'Không đọc được tên từ ảnh giấy tờ.';
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) setState(() => _isReadingName = false);
+    }
   }
 
   Future<void> _pasteCookie() async {
@@ -112,9 +218,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     if (!mounted) return;
     final text = data?.text?.trim() ?? '';
     if (text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bộ nhớ tạm đang trống.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Bộ nhớ tạm đang trống.')));
       return;
     }
 
@@ -126,7 +232,11 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(extracted != text ? 'Đã tự động trích xuất Cookie từ bộ nhớ tạm!' : 'Đã dán Cookie!'),
+        content: Text(
+          extracted != text
+              ? 'Đã tự động trích xuất Cookie từ bộ nhớ tạm!'
+              : 'Đã dán Cookie!',
+        ),
       ),
     );
   }
@@ -159,8 +269,14 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                 hintText: 'https://note.2fa.live/note/...',
                 filled: true,
                 fillColor: const Color(0xFFF2F2F7),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
             ),
           ],
@@ -196,7 +312,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     String alias = input.trim();
     if (alias.contains('/')) {
       try {
-        final uri = Uri.parse(alias.startsWith('http') ? alias : 'https://$alias');
+        final uri = Uri.parse(
+          alias.startsWith('http') ? alias : 'https://$alias',
+        );
         alias = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : alias;
       } catch (_) {}
     }
@@ -239,7 +357,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
       final accountsWithCookie = parsed.where((a) => a.hasCookie).toList();
 
       if (accountsWithCookie.isEmpty) {
-        throw Exception('Không tìm thấy dòng tài khoản nào chứa Cookie trong Notepad.');
+        throw Exception(
+          'Không tìm thấy dòng tài khoản nào chứa Cookie trong Notepad.',
+        );
       }
 
       setState(() {
@@ -250,7 +370,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Đã nạp Cookie của ${accountsWithCookie.first.username.isNotEmpty ? accountsWithCookie.first.username : "tài khoản"}!'),
+            content: Text(
+              'Đã nạp Cookie của ${accountsWithCookie.first.username.isNotEmpty ? accountsWithCookie.first.username : "tài khoản"}!',
+            ),
           ),
         );
       }
@@ -258,18 +380,22 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
       if (mounted) Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi tải Notepad: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Lỗi tải Notepad: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
   Future<void> _startVerification() async {
+    if (_isLoading || _isReadingName) return;
     final cookie = _cookieController.text.trim();
     if (cookie.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng nhập Cookie Instagram!'),
+          content: Text('Vui lòng nhập Cookie tài khoản cần xác minh!'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -289,8 +415,20 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     if (_photoCount == 2 && _backImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Bạn đã chọn 2 ảnh, vui lòng tải lên thêm ảnh mặt sau!'),
+          content: Text(
+            'Bạn đã chọn 2 ảnh, vui lòng tải lên thêm ảnh mặt sau!',
+          ),
           backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (_platform == 'facebook' &&
+        _updateAvatarBeforeSubmit &&
+        _avatarImageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hãy chọn ảnh đại diện mới trước khi bắt đầu.'),
         ),
       );
       return;
@@ -310,19 +448,74 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     final proxy = _proxyController.text.trim();
     final customEndpoint = _customEndpointController.text.trim();
 
-    final result = await InstagramVerificationService.submitVerification(
-      cookie: cookie,
-      documentImages: images,
-      proxy: proxy.isNotEmpty ? proxy : null,
-      customEndpoint: customEndpoint.isNotEmpty ? customEndpoint : null,
-      onProgress: (msg) {
-        if (mounted) {
-          setState(() {
-            _progressMessage = msg;
-          });
+    InstagramVerifyResult? result;
+    try {
+      if (_platform == 'facebook' && customEndpoint.isEmpty) {
+        if (proxy.isNotEmpty) {
+          throw StateError(
+            'Luồng trình duyệt Facebook chưa hỗ trợ proxy riêng. Hãy bỏ proxy hoặc dùng server riêng.',
+          );
         }
-      },
-    );
+        DocumentProfileName? profileName;
+        if (_updateNameBeforeSubmit) {
+          setState(
+            () =>
+                _progressMessage = 'Đang đọc họ tên từ giấy tờ bằng Gemini...',
+          );
+          profileName = await _loadProfileName();
+          if (!mounted) return;
+        }
+        result = await Navigator.push<InstagramVerifyResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FacebookVerificationBrowserScreen(
+              cookie: cookie,
+              documentImages: images,
+              documentType: _documentType,
+              profileName: profileName,
+              avatarImage: _updateAvatarBeforeSubmit ? _avatarImageBytes : null,
+            ),
+          ),
+        );
+        result ??= const InstagramVerifyResult(
+          status: InstagramVerifyStatus.error,
+          title: 'Đã đóng trang xác minh',
+          message:
+              'Chưa có xác nhận tiếp nhận từ Facebook. Nếu đã nhấn gửi, hãy kiểm tra trạng thái trước khi gửi lại.',
+        );
+      } else {
+        if (_platform == 'facebook' &&
+            (_updateNameBeforeSubmit || _updateAvatarBeforeSubmit)) {
+          throw StateError(
+            'Server riêng hiện chưa có giao thức cập nhật tên/avatar. Hãy để trống server để dùng luồng trực tiếp.',
+          );
+        }
+        result = await InstagramVerificationService.submitVerification(
+          cookie: cookie,
+          documentImages: images,
+          platform: _platform,
+          proxy: proxy.isNotEmpty ? proxy : null,
+          customEndpoint: customEndpoint.isNotEmpty ? customEndpoint : null,
+          onProgress: (msg) {
+            if (mounted) {
+              setState(() {
+                _progressMessage = msg;
+              });
+            }
+          },
+        );
+      }
+    } catch (e) {
+      result = InstagramVerifyResult(
+        status: InstagramVerifyStatus.error,
+        title: 'Không thể bắt đầu xác minh',
+        message: e is StateError
+            ? e.message.toString()
+            : e is FormatException
+            ? e.message
+            : 'Không thể bắt đầu tác vụ. Kiểm tra cookie, ảnh và cấu hình dịch vụ.',
+      );
+    }
 
     if (mounted) {
       setState(() {
@@ -391,11 +584,65 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                 const SizedBox(height: 18),
 
                 // 2. Cookie Instagram Section
+                DropdownButtonFormField<String>(
+                  initialValue: _platform,
+                  decoration: const InputDecoration(labelText: 'Nền tảng'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'instagram',
+                      child: Text('Instagram'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'facebook',
+                      child: Text('Facebook'),
+                    ),
+                  ],
+                  onChanged: _isLoading
+                      ? null
+                      : (value) => setState(() {
+                          _platform = value!;
+                          _verifyResult = null;
+                        }),
+                ),
+                if (_platform == 'facebook') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _documentType,
+                    decoration: const InputDecoration(
+                      labelText: 'Loại giấy tờ',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'national_id',
+                        child: Text('CCCD / CMND'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'passport',
+                        child: Text('Hộ chiếu'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'driver_license',
+                        child: Text('Bằng lái xe'),
+                      ),
+                    ],
+                    onChanged: _isLoading
+                        ? null
+                        : (value) => setState(() => _documentType = value!),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'App sẽ mở Facebook, dùng cookie để tạo phiên, lấy link xác minh và điền ảnh giấy tờ đã chọn. Luồng trực tiếp hỗ trợ Windows/iOS, không dùng proxy riêng.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                  ),
+                ],
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Cookie Instagram',
+                    Text(
+                      _platform == 'facebook'
+                          ? 'Cookie Facebook'
+                          : 'Cookie Instagram',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -408,10 +655,17 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                           onTap: _pasteCookie,
                           borderRadius: BorderRadius.circular(6),
                           child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             child: Row(
                               children: [
-                                Icon(Icons.paste_rounded, size: 14, color: Color(0xFFD946EF)),
+                                Icon(
+                                  Icons.paste_rounded,
+                                  size: 14,
+                                  color: Color(0xFFD946EF),
+                                ),
                                 SizedBox(width: 4),
                                 Text(
                                   'Dán',
@@ -430,10 +684,17 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                           onTap: _importFromNotepad,
                           borderRadius: BorderRadius.circular(6),
                           child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             child: Row(
                               children: [
-                                Icon(Icons.cloud_download_outlined, size: 14, color: Color(0xFF2563EB)),
+                                Icon(
+                                  Icons.cloud_download_outlined,
+                                  size: 14,
+                                  color: Color(0xFF2563EB),
+                                ),
                                 SizedBox(width: 4),
                                 Text(
                                   'Note 2FA',
@@ -456,10 +717,16 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                               });
                             },
                             child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
                               child: Text(
                                 'Xóa',
-                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ),
                           ),
@@ -479,10 +746,18 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                     controller: _cookieController,
                     maxLines: 4,
                     minLines: 3,
-                    style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
-                    decoration: const InputDecoration(
-                      hintText: 'datr=...; ig_did=...; mid=...; csrftoken=...; ds_user_id=...; sessionid=...',
-                      hintStyle: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                    ),
+                    decoration: InputDecoration(
+                      hintText: _platform == 'facebook'
+                          ? 'c_user=...; xs=...; datr=...; sb=...'
+                          : 'datr=...; ig_did=...; mid=...; csrftoken=...; ds_user_id=...; sessionid=...',
+                      hintStyle: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF9CA3AF),
+                      ),
                       contentPadding: EdgeInsets.all(12),
                       border: InputBorder.none,
                     ),
@@ -514,10 +789,14 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                         child: Container(
                           height: 42,
                           decoration: BoxDecoration(
-                            color: _photoCount == 1 ? const Color(0xFFFDF2F8) : Colors.white,
+                            color: _photoCount == 1
+                                ? const Color(0xFFFDF2F8)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _photoCount == 1 ? const Color(0xFFE1306C) : const Color(0xFFD1D5DB),
+                              color: _photoCount == 1
+                                  ? const Color(0xFFE1306C)
+                                  : const Color(0xFFD1D5DB),
                               width: _photoCount == 1 ? 1.5 : 1,
                             ),
                           ),
@@ -527,7 +806,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: _photoCount == 1 ? const Color(0xFFE1306C) : const Color(0xFF4B5563),
+                              color: _photoCount == 1
+                                  ? const Color(0xFFE1306C)
+                                  : const Color(0xFF4B5563),
                             ),
                           ),
                         ),
@@ -545,10 +826,14 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                         child: Container(
                           height: 42,
                           decoration: BoxDecoration(
-                            color: _photoCount == 2 ? const Color(0xFFFDF2F8) : Colors.white,
+                            color: _photoCount == 2
+                                ? const Color(0xFFFDF2F8)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _photoCount == 2 ? const Color(0xFFE1306C) : const Color(0xFFD1D5DB),
+                              color: _photoCount == 2
+                                  ? const Color(0xFFE1306C)
+                                  : const Color(0xFFD1D5DB),
                               width: _photoCount == 2 ? 1.5 : 1,
                             ),
                           ),
@@ -558,7 +843,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: _photoCount == 2 ? const Color(0xFFE1306C) : const Color(0xFF4B5563),
+                              color: _photoCount == 2
+                                  ? const Color(0xFFE1306C)
+                                  : const Color(0xFF4B5563),
                             ),
                           ),
                         ),
@@ -570,7 +857,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
 
                 // 4. Ảnh giấy tờ Section
                 Text(
-                  _photoCount == 1 ? 'Ảnh giấy tờ' : 'Ảnh giấy tờ (Mặt trước & Mặt sau)',
+                  _photoCount == 1
+                      ? 'Ảnh giấy tờ'
+                      : 'Ảnh giấy tờ (Mặt trước & Mặt sau)',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -595,7 +884,11 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                           children: [
                             const Text(
                               'Mặt trước',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF6B7280),
+                              ),
                             ),
                             const SizedBox(height: 4),
                             _buildPhotoContainer(
@@ -615,7 +908,11 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                           children: [
                             const Text(
                               'Mặt sau',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF6B7280),
+                              ),
                             ),
                             const SizedBox(height: 4),
                             _buildPhotoContainer(
@@ -635,21 +932,119 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                 const SizedBox(height: 14),
 
                 // 5. Cài đặt nâng cao (Proxy & Custom Endpoint)
+                if (_platform == 'facebook') ...[
+                  const Text(
+                    'Cập nhật hồ sơ trước khi xác minh',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Đổi tên theo giấy tờ',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    subtitle: const Text(
+                      'Gemini đọc chữ từ ảnh giấy tờ và tách họ, tên đệm, tên riêng.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: _updateNameBeforeSubmit,
+                    onChanged: _isLoading || _isReadingName
+                        ? null
+                        : (value) =>
+                              setState(() => _updateNameBeforeSubmit = value),
+                  ),
+                  if (_updateNameBeforeSubmit) ...[
+                    const Text(
+                      'Ảnh giấy tờ sẽ được gửi tới Google Gemini để đọc tên.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _geminiKeyController,
+                      obscureText: true,
+                      enableSuggestions: false,
+                      autocorrect: false,
+                      enabled: !_isLoading && !_isReadingName,
+                      decoration: const InputDecoration(
+                        labelText:
+                            'Gemini API key (nếu bản build chưa cấu hình)',
+                        helperText:
+                            'Chỉ giữ trong phiên app, không lưu vào dữ liệu web.',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _isLoading || _isReadingName
+                          ? null
+                          : _previewDocumentName,
+                      icon: _isReadingName
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.document_scanner_outlined),
+                      label: Text(
+                        _isReadingName
+                            ? 'Đang đọc tên...'
+                            : 'Đọc tên từ giấy tờ',
+                      ),
+                    ),
+                    if (_profileName != null)
+                      Text(
+                        'Tên đọc được: ${_profileName!.fullName}\nHọ: ${_profileName!.familyName} · Tên đệm: ${_profileName!.middleName} · Tên: ${_profileName!.givenName}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                  ],
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Cập nhật ảnh đại diện',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    value: _updateAvatarBeforeSubmit,
+                    onChanged: _isLoading || _isReadingName
+                        ? null
+                        : (value) =>
+                              setState(() => _updateAvatarBeforeSubmit = value),
+                  ),
+                  if (_updateAvatarBeforeSubmit)
+                    _buildPhotoContainer(
+                      bytes: _avatarImageBytes,
+                      label: '+ Chọn ảnh đại diện mới',
+                      height: 140,
+                      onPick: _pickAvatar,
+                      onRemove: () {
+                        if (!_isLoading && !_isReadingName) {
+                          setState(() => _avatarImageBytes = null);
+                        }
+                      },
+                    ),
+                  const SizedBox(height: 12),
+                ],
                 Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  data: Theme.of(
+                    context,
+                  ).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
                     tilePadding: EdgeInsets.zero,
                     title: Row(
                       children: [
                         Icon(
-                          _showAdvanced ? Icons.tune_rounded : Icons.tune_outlined,
+                          _showAdvanced
+                              ? Icons.tune_rounded
+                              : Icons.tune_outlined,
                           size: 16,
                           color: const Color(0xFF6B7280),
                         ),
                         const SizedBox(width: 6),
                         const Text(
                           'Cấu hình nâng cao (Proxy / Server riêng)',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF6B7280),
+                          ),
                         ),
                       ],
                     ),
@@ -664,10 +1059,19 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                         controller: _proxyController,
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
-                          labelText: 'Proxy (tùy chọn: IP:Port hoặc IP:Port:User:Pass)',
-                          labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          labelText:
+                              'Proxy (tùy chọn: IP:Port hoặc IP:Port:User:Pass)',
+                          labelStyle: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -675,11 +1079,20 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                         controller: _customEndpointController,
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
-                          labelText: 'Custom API Endpoint (tùy chọn URL server riêng)',
+                          labelText:
+                              'Custom API Endpoint (tùy chọn URL server riêng)',
                           hintText: 'https://your-server.com/api/verify_ig',
-                          labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          labelStyle: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -695,7 +1108,11 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                   height: 48,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFD946EF), Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                      colors: [
+                        Color(0xFFD946EF),
+                        Color(0xFF8B5CF6),
+                        Color(0xFF7C3AED),
+                      ],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
@@ -712,7 +1129,9 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                     color: Colors.transparent,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      onTap: _isLoading ? null : _startVerification,
+                      onTap: _isLoading || _isReadingName
+                          ? null
+                          : _startVerification,
                       child: Center(
                         child: _isLoading
                             ? Row(
@@ -723,12 +1142,15 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
                                   Text(
-                                    _progressMessage ?? 'Đang xử lý xác minh...',
+                                    _progressMessage ??
+                                        'Đang xử lý xác minh...',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 14,
@@ -740,7 +1162,11 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                             : const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                                  Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
                                   SizedBox(width: 6),
                                   Text(
                                     'Bắt đầu xác minh',
@@ -774,7 +1200,7 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
       return Scaffold(
         backgroundColor: const Color(0xFFF9FAFB),
         appBar: AppBar(
-          title: const Text('Xác minh Instagram (Cookie)'),
+          title: const Text('Xác minh tài khoản (Cookie)'),
           backgroundColor: Colors.white,
           elevation: 0,
           centerTitle: true,
@@ -791,7 +1217,7 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: const Text('Xác minh Instagram qua Cookie'),
+        title: const Text('Xác minh tài khoản qua Cookie'),
         elevation: 0,
         backgroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Color(0xFF1F2937)),
@@ -871,7 +1297,10 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
         decoration: BoxDecoration(
           color: const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
+          border: Border.all(
+            color: const Color(0xFFD1D5DB),
+            style: BorderStyle.solid,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -932,7 +1361,10 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: statusColor.withValues(alpha: 0.08),
@@ -961,14 +1393,21 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
               ),
               if (result.userId != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3F4F6),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     'UID: ${result.userId}',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF4B5563)),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF4B5563),
+                    ),
                   ),
                 ),
             ],
@@ -976,9 +1415,14 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
           const SizedBox(height: 10),
           Text(
             result.message,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.4),
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFF374151),
+              height: 1.4,
+            ),
           ),
-          if (result.checkpointUrl != null && result.checkpointUrl!.isNotEmpty) ...[
+          if (result.checkpointUrl != null &&
+              result.checkpointUrl!.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
@@ -1010,15 +1454,23 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(Icons.open_in_browser, size: 16),
-                    label: const Text('Mở trình duyệt', style: TextStyle(fontSize: 13)),
+                    label: const Text(
+                      'Mở trình duyệt',
+                      style: TextStyle(fontSize: 13),
+                    ),
                     onPressed: () async {
                       final uri = Uri.parse(result.checkpointUrl!);
                       if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
                       }
                     },
                   ),
@@ -1028,15 +1480,24 @@ class _InstagramCookieVerifyScreenState extends State<InstagramCookieVerifyScree
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.blue,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     icon: const Icon(Icons.copy_rounded, size: 16),
-                    label: const Text('Sao chép link', style: TextStyle(fontSize: 13)),
+                    label: const Text(
+                      'Sao chép link',
+                      style: TextStyle(fontSize: 13),
+                    ),
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: result.checkpointUrl!));
+                      Clipboard.setData(
+                        ClipboardData(text: result.checkpointUrl!),
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã sao chép link xác minh!')),
+                        const SnackBar(
+                          content: Text('Đã sao chép link xác minh!'),
+                        ),
                       );
                     },
                   ),

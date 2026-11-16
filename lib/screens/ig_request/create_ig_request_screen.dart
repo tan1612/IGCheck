@@ -986,11 +986,16 @@ class _CreateIGRequestScreenState extends State<CreateIGRequestScreen> {
             mockId,
           );
           
+          final targetDisplay = Validators.formatTelegramTargetDisplay(
+            accountType: _accountType,
+            username: normalizedUsername,
+          );
+          
           final telegramMsg = isVerified
               ? '🌟 <b>HỒ SƠ TÍCH XANH MỚI</b> 🌟\n'
-                '${user.name} vừa gửi một yêu cầu check $serviceLabel có <b>TÍCH XANH (Verified Badge)</b> cho <code>$normalizedUsername</code>.'
+                '${user.name} vừa gửi một yêu cầu check $serviceLabel có <b>TÍCH XANH (Verified Badge)</b> cho $targetDisplay'
               : '🔔 <b>Yêu cầu mới</b>\n'
-                '${user.name} vừa gửi một yêu cầu check $serviceLabel cho <code>$normalizedUsername</code>.';
+                '${user.name} vừa gửi một yêu cầu check $serviceLabel cho $targetDisplay';
 
           notifService.sendTelegramMessage(
             telegramMsg,

@@ -7,28 +7,31 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 class NotificationService extends ChangeNotifier {
   // --- TELEGRAM BOT CONFIG ---
   // Thay thế bằng Token của Telegram Bot bạn tạo từ @BotFather
-  static const String _telegramBotToken = '8655291561:AAHksFJvgl0hkEnVRhD2JVDu6bJ54wmaZPY';
+  static const String _telegramBotToken =
+      '8655291561:AAHksFJvgl0hkEnVRhD2JVDu6bJ54wmaZPY';
   // ---------------------------
 
-  final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  
+  final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
   String? _fcmToken;
   bool _hasPermission = false;
   Function(String requestId)? _onNotificationTap;
+  late final Future<void> _initialization;
+  bool _localNotificationsReady = false;
 
   String? get fcmToken => _fcmToken;
   bool get hasPermission => _hasPermission;
 
   NotificationService() {
-    _initLocalNotifications();
+    _initialization = _initLocalNotifications();
   }
 
   Future<void> _initLocalNotifications() async {
     try {
-      if (!kIsWeb && Platform.isWindows) {
-        return;
-      }
-      const androidInitSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidInitSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
       const iosInitSettings = DarwinInitializationSettings(
         requestAlertPermission: false,
         requestBadgePermission: false,
@@ -38,6 +41,11 @@ class NotificationService extends ChangeNotifier {
       const initSettings = InitializationSettings(
         android: androidInitSettings,
         iOS: iosInitSettings,
+        windows: WindowsInitializationSettings(
+          appName: 'IGCheck',
+          appUserModelId: 'IGCheck.PairIGReview',
+          guid: 'bc0a3dbc-07e4-4c3d-9a38-e02b6c84ea73',
+        ),
       );
 
       await _localNotificationsPlugin.initialize(
@@ -48,6 +56,7 @@ class NotificationService extends ChangeNotifier {
           }
         },
       );
+      _localNotificationsReady = true;
     } catch (e) {
       debugPrint('NotificationService init error: $e');
     }
@@ -62,33 +71,37 @@ class NotificationService extends ChangeNotifier {
       _hasPermission = true;
     } else if (Platform.isIOS) {
       final result = await _localNotificationsPlugin
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(
-            alert: true,
-            badge: true,
-            sound: true,
-          );
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
       _hasPermission = result ?? false;
     } else if (Platform.isAndroid) {
       final result = await _localNotificationsPlugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.requestNotificationsPermission();
       _hasPermission = result ?? false;
     }
 
-    // Since we rely on Telegram instead of FCM for Sideloadly iOS apps, 
+    // Since we rely on Telegram instead of FCM for Sideloadly iOS apps,
     // we generate a dummy FCM token if one doesn't exist.
-    _fcmToken = 'dummy_fcm_token_sideloadly_${DateTime.now().millisecondsSinceEpoch}';
+    _fcmToken =
+        'dummy_fcm_token_sideloadly_${DateTime.now().millisecondsSinceEpoch}';
     notifyListeners();
     return _hasPermission;
   }
 
   /// Hiển thị Local Notification (foreground)
-  Future<void> showLocalNotification(String title, String body, String payload) async {
+  Future<void> showLocalNotification(
+    String title,
+    String body,
+    String payload,
+  ) async {
     try {
-      if (!kIsWeb && Platform.isWindows) {
-        return;
-      }
+      await _initialization;
+      if (!_localNotificationsReady) return;
       const androidDetails = AndroidNotificationDetails(
         'igcheck_main_channel',
         'IGCheck Notifications',
@@ -100,7 +113,11 @@ class NotificationService extends ChangeNotifier {
         presentBadge: true,
         presentSound: true,
       );
-      const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+      const details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+        windows: WindowsNotificationDetails(),
+      );
 
       await _localNotificationsPlugin.show(
         id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
@@ -115,9 +132,16 @@ class NotificationService extends ChangeNotifier {
   }
 
   /// Gửi thông báo Telegram
-  Future<void> sendTelegramMessage(String message, {String? targetChatId}) async {
-    if (_telegramBotToken == 'YOUR_TELEGRAM_BOT_TOKEN_HERE' || _telegramBotToken.isEmpty) {
-      debugPrint('Telegram Bot Token chưa được cấu hình. Bỏ qua gửi thông báo.');
+  Future<void> sendTelegramMessage(
+    String message, {
+    String? targetChatId,
+    bool disableWebPagePreview = true,
+  }) async {
+    if (_telegramBotToken == 'YOUR_TELEGRAM_BOT_TOKEN_HERE' ||
+        _telegramBotToken.isEmpty) {
+      debugPrint(
+        'Telegram Bot Token chưa được cấu hình. Bỏ qua gửi thông báo.',
+      );
       return;
     }
 
@@ -134,9 +158,11 @@ class NotificationService extends ChangeNotifier {
           'chat_id': targetChatId,
           'text': message,
           'parse_mode': 'HTML',
+          'disable_web_page_preview': disableWebPagePreview,
+          'link_preview_options': {'is_disabled': disableWebPagePreview},
         },
       );
-      
+
       if (response.statusCode == 200) {
         debugPrint('Đã gửi thông báo Telegram thành công.');
       } else {
@@ -148,12 +174,17 @@ class NotificationService extends ChangeNotifier {
   }
 
   // Simulate receiving a notification in foreground (for testing or real usage)
-  void simulateIncomingNotification(BuildContext context, String title, String body, String requestId) {
+  void simulateIncomingNotification(
+    BuildContext context,
+    String title,
+    String body,
+    String requestId,
+  ) {
     if (_hasPermission) {
       // Trigger actual local push notification
       showLocalNotification(title, body, requestId);
     }
-    
+
     // Also show snackbar inside the app as a banner
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -168,11 +199,18 @@ class NotificationService extends ChangeNotifier {
           children: [
             Row(
               children: [
-                const Icon(Icons.notifications_active, color: Colors.white, size: 18),
+                const Icon(
+                  Icons.notifications_active,
+                  color: Colors.white,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -194,57 +232,69 @@ class NotificationService extends ChangeNotifier {
   }
 
   /// Kiểm tra tài khoản có tích xanh hay không (Instagram hoặc Facebook)
-  Future<bool> checkVerificationStatus(String accountType, String usernameOrUid) async {
+  Future<bool> checkVerificationStatus(
+    String accountType,
+    String usernameOrUid,
+  ) async {
     if (usernameOrUid.isEmpty) return false;
-    
+
     try {
       final dio = Dio();
       dio.options.connectTimeout = const Duration(seconds: 10);
       dio.options.receiveTimeout = const Duration(seconds: 10);
       dio.options.validateStatus = (status) => status != null && status < 500;
-      
+
       final headers = {
-        'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'user-agent':
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'accept-language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
       };
-      
+
       String url = '';
       if (accountType.toLowerCase() == 'instagram') {
-        final cleanUsername = usernameOrUid.startsWith('@') 
-            ? usernameOrUid.substring(1).trim() 
+        final cleanUsername = usernameOrUid.startsWith('@')
+            ? usernameOrUid.substring(1).trim()
             : usernameOrUid.trim();
         url = 'https://www.instagram.com/$cleanUsername/';
       } else {
         url = 'https://www.facebook.com/${usernameOrUid.trim()}/';
       }
-      
+
       final response = await dio.get(
         url,
-        options: Options(headers: headers, followRedirects: true, maxRedirects: 3),
+        options: Options(
+          headers: headers,
+          followRedirects: true,
+          maxRedirects: 3,
+        ),
       );
-      
+
       final html = response.data?.toString() ?? '';
-      
+
       // Regex check for verified badge in HTML
       // 1. "is_verified":true or "verified":true
       final isVerifiedRegex = RegExp(r'"is_verified"\s*:\s*true');
       final verifiedRegex = RegExp(r'"verified"\s*:\s*true');
-      
+
       if (isVerifiedRegex.hasMatch(html) || verifiedRegex.hasMatch(html)) {
         return true;
       }
-      
+
       // 2. Facebook verified page indicators
       if (accountType.toLowerCase() == 'facebook') {
-        if (html.contains('verification_status') && html.contains('blue_verified')) {
+        if (html.contains('verification_status') &&
+            html.contains('blue_verified')) {
           return true;
         }
       }
-      
+
       return false;
     } catch (e) {
-      debugPrint('Lỗi kiểm tra tích xanh cho $usernameOrUid ($accountType): $e');
+      debugPrint(
+        'Lỗi kiểm tra tích xanh cho $usernameOrUid ($accountType): $e',
+      );
       return false;
     }
   }

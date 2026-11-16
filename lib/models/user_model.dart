@@ -9,6 +9,7 @@ class UserModel {
   final String? telegramChatId;
   final String? customIgNotepadUrl;
   final String? customFbNotepadUrl;
+  final String? geminiApiKey;
   final DateTime? lastSeenAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -24,6 +25,7 @@ class UserModel {
     this.telegramChatId,
     this.customIgNotepadUrl,
     this.customFbNotepadUrl,
+    this.geminiApiKey,
     this.lastSeenAt,
     this.createdAt,
     this.updatedAt,
@@ -40,6 +42,7 @@ class UserModel {
     String? telegramChatId,
     String? customIgNotepadUrl,
     String? customFbNotepadUrl,
+    String? geminiApiKey,
     DateTime? lastSeenAt,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -55,6 +58,7 @@ class UserModel {
       telegramChatId: telegramChatId ?? this.telegramChatId,
       customIgNotepadUrl: customIgNotepadUrl ?? this.customIgNotepadUrl,
       customFbNotepadUrl: customFbNotepadUrl ?? this.customFbNotepadUrl,
+      geminiApiKey: geminiApiKey ?? this.geminiApiKey,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -73,6 +77,7 @@ class UserModel {
       telegramChatId: telegramChatId,
       customIgNotepadUrl: customIgNotepadUrl,
       customFbNotepadUrl: customFbNotepadUrl,
+      geminiApiKey: geminiApiKey,
       lastSeenAt: lastSeenAt,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
@@ -91,6 +96,7 @@ class UserModel {
       telegramChatId: json['telegramChatId'] as String?,
       customIgNotepadUrl: json['customIgNotepadUrl'] as String?,
       customFbNotepadUrl: json['customFbNotepadUrl'] as String?,
+      geminiApiKey: json['geminiApiKey'] as String?,
       lastSeenAt: _parseDate(json['lastSeenAt']),
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
@@ -121,6 +127,7 @@ class UserModel {
       'telegramChatId': telegramChatId,
       'customIgNotepadUrl': customIgNotepadUrl,
       'customFbNotepadUrl': customFbNotepadUrl,
+      'geminiApiKey': geminiApiKey,
       'lastSeenAt': lastSeenAt?.toIso8601String(),
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),

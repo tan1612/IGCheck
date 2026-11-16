@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import 'dart:async';
+import 'ai_service.dart';
 
 class AuthService extends ChangeNotifier {
   UserModel? _currentUser;
@@ -66,6 +67,9 @@ class AuthService extends ChangeNotifier {
       _userSubscription = FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((doc) async {
         if (doc.exists && doc.data() != null) {
           _currentUser = UserModel.fromJson(doc.data()!);
+          if (_currentUser!.geminiApiKey?.isNotEmpty == true) {
+            AIService().setApiKeyForSession(_currentUser!.geminiApiKey!);
+          }
           if (_currentUser!.partnerId != null && _currentUser!.partnerId!.isNotEmpty) {
             try {
               final pDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.partnerId).get();
@@ -288,6 +292,29 @@ class AuthService extends ChangeNotifier {
     }
     
     _currentUser = updated;
+    notifyListeners();
+  }
+
+  void updateGeminiApiKey(String apiKey) {
+    if (_currentUser == null) return;
+    final cleanKey = apiKey.trim();
+    final updated = _currentUser!.copyWith(
+      geminiApiKey: cleanKey,
+      updatedAt: DateTime.now(),
+    );
+
+    if (useFirebase) {
+      FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).update({
+        'geminiApiKey': cleanKey,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      final index = _mockUsers.indexWhere((u) => u.uid == _currentUser!.uid);
+      if (index != -1) _mockUsers[index] = updated;
+    }
+
+    _currentUser = updated;
+    AIService().setApiKeyForSession(cleanKey);
     notifyListeners();
   }
 

@@ -24,6 +24,39 @@ try {
 const db = admin.firestore();
 const TELEGRAM_BOT_TOKEN = '8655291561:AAHksFJvgl0hkEnVRhD2JVDu6bJ54wmaZPY';
 
+function formatFacebookProfileUrl(input) {
+  if (!input) return '';
+  let clean = String(input).trim();
+  if (clean.startsWith('@')) {
+    clean = clean.substring(1).trim();
+  }
+  const idMatch = clean.match(/profile\.php\?id=(\d+)/);
+  if (idMatch) {
+    return `https://www.facebook.com/profile.php?id=${idMatch[1]}#`;
+  }
+  if (/^\d+$/.test(clean)) {
+    return `https://www.facebook.com/profile.php?id=${clean}#`;
+  }
+  const fbSlashMatch = clean.match(/facebook\.com\/(\d+)/);
+  if (fbSlashMatch) {
+    return `https://www.facebook.com/profile.php?id=${fbSlashMatch[1]}#`;
+  }
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    return clean.endsWith('#') ? clean : `${clean}#`;
+  }
+  return `https://www.facebook.com/${clean}#`;
+}
+
+function formatTelegramTargetDisplay(accountType, username) {
+  if ((accountType || '').toLowerCase() === 'facebook') {
+    const url = formatFacebookProfileUrl(username);
+    return `<a href="${url}">${url}</a>`;
+  }
+  const clean = String(username || '').trim();
+  const igUser = clean.startsWith('@') ? clean : `@${clean}`;
+  return `<code>${escapeHtml(igUser)}</code>`;
+}
+
 // 2. Helper to send Telegram messages
 async function sendTelegramMessage(chatId, text, replyMarkup = null) {
   if (!chatId) return;
@@ -31,7 +64,9 @@ async function sendTelegramMessage(chatId, text, replyMarkup = null) {
     const payload = {
       chat_id: chatId,
       text: text,
-      parse_mode: 'HTML'
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      link_preview_options: { is_disabled: true }
     };
     if (replyMarkup) {
       payload.reply_markup = replyMarkup;
@@ -290,12 +325,14 @@ async function scanActiveRequests(targetChatId = null) {
           updateData.accountStatus = currentAccountStatus;
         }
 
+        const targetDisplay = formatTelegramTargetDisplay(req.accountType, username);
+
         // 1. Check for NEW VERIFIED (Tích Xanh) status
         if (currentVerified && !prevVerified) {
           console.log(`🎉 SUCCESS: ${username} has achieved VERIFIED status!`);
           notifications.push(
             `🎉 <b>TÀI KHOẢN ĐẠT TÍCH XANH!</b> 🎉\n` +
-            `Tài khoản ${serviceLabel} <code>${username}</code> vừa được phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!`
+            `Tài khoản ${serviceLabel} ${targetDisplay} vừa được phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!`
           );
         }
 
@@ -304,7 +341,7 @@ async function scanActiveRequests(targetChatId = null) {
           console.log(`⚠️ ALERT: ${username} is DEAD!`);
           notifications.push(
             `⚠️ <b>CẢNH BÁO TÀI KHOẢN BỊ DIE!</b> ⚠️\n` +
-            `Tài khoản ${serviceLabel} <code>${username}</code> vừa chuyển trạng thái sang <b>DIE (Bị vô hiệu hóa / Không tồn tại)</b>!`
+            `Tài khoản ${serviceLabel} ${targetDisplay} vừa chuyển trạng thái sang <b>DIE (Bị vô hiệu hóa / Không tồn tại)</b>!`
           );
         }
         // 3. Check for Account RESTORED (DIE -> LIVE)
@@ -312,7 +349,7 @@ async function scanActiveRequests(targetChatId = null) {
           console.log(`✅ RESTORED: ${username} is LIVE again!`);
           notifications.push(
             `✅ <b>TÀI KHOẢN ĐÃ LIVE TRỞ LẠI!</b> ✅\n` +
-            `Tài khoản ${serviceLabel} <code>${username}</code> vừa khôi phục trạng thái <b>LIVE</b> hoạt động bình thường!`
+            `Tài khoản ${serviceLabel} ${targetDisplay} vừa khôi phục trạng thái <b>LIVE</b> hoạt động bình thường!`
           );
         }
         // 4. Initial check for newly added account if it's already dead on creation
@@ -320,12 +357,12 @@ async function scanActiveRequests(targetChatId = null) {
           console.log(`⚠️ ALERT: Newly added ${username} is DEAD!`);
           notifications.push(
             `⚠️ <b>CẢNH BÁO: TÀI KHOẢN MỚI GỬI ĐÃ BỊ DIE!</b> ⚠️\n` +
-            `Tài khoản ${serviceLabel} <code>${username}</code> vừa gửi nhưng đã ở trạng thái <b>DIE</b>!`
+            `Tài khoản ${serviceLabel} ${targetDisplay} vừa gửi nhưng đã ở trạng thái <b>DIE</b>!`
           );
         }
 
         const iconStr = currentVerified ? '💙 TÍCH XANH' : (currentAccountStatus === 'dead' ? '🔴 DIE' : '✅ LIVE');
-        summaryResults.push(`• <code>${username}</code> (${serviceLabel}): <b>${iconStr}</b>`);
+        summaryResults.push(`• ${targetDisplay} (${serviceLabel}): <b>${iconStr}</b>`);
 
         // Save updates to Firestore
         if (Object.keys(updateData).length > 0) {
@@ -441,8 +478,9 @@ async function handleTelegramMessage(msg) {
         const passClean = escapeHtml(r.password || 'N/A');
         const twoFaClean = escapeHtml(r.twoFactorKey || 'N/A');
         const nameClean = escapeHtml(r.displayName || 'N/A');
+        const targetDisplay = formatTelegramTargetDisplay(r.accountType, r.instagramUsername);
 
-        message += `<b>${idx + 1}. ${typeLabel}: @${userClean}</b>\n` +
+        message += `<b>${idx + 1}. ${typeLabel}: ${targetDisplay}</b>\n` +
           `• Họ tên: <b>${nameClean}</b>\n` +
           `• User: <code>${userClean}</code>\n` +
           `• Pass: <code>${passClean}</code>\n` +
@@ -474,8 +512,9 @@ async function handleTelegramMessage(msg) {
         const typeLabel = r.accountType === 'facebook' ? 'Facebook' : 'Instagram';
         const userClean = escapeHtml(r.instagramUsername);
         const nameClean = escapeHtml(r.displayName || 'N/A');
+        const targetDisplay = formatTelegramTargetDisplay(r.accountType, r.instagramUsername);
 
-        message += `<b>${idx + 1}. ${typeLabel}: @${userClean}</b>\n` +
+        message += `<b>${idx + 1}. ${typeLabel}: ${targetDisplay}</b>\n` +
           `• Họ tên: <b>${nameClean}</b>\n` +
           `• User: <code>${userClean}</code>\n` +
           `• Trạng thái: 🔴 <b>BỊ DIE / KHÓA</b>\n\n`;
@@ -506,8 +545,9 @@ async function handleTelegramMessage(msg) {
         const statusIcon = r.isVerified ? '💙 TÍCH XANH' : r.accountStatus === 'dead' ? '🔴 DIE' : '✅ LIVE';
         const userClean = escapeHtml(r.instagramUsername);
         const nameClean = escapeHtml(r.displayName || 'N/A');
+        const targetDisplay = formatTelegramTargetDisplay(r.accountType, r.instagramUsername);
 
-        message += `<b>${idx + 1}. ${typeLabel}: @${userClean}</b>\n` +
+        message += `<b>${idx + 1}. ${typeLabel}: ${targetDisplay}</b>\n` +
           `• Họ tên: ${nameClean}\n` +
           `• Trạng thái: <b>${statusIcon}</b>\n\n`;
       });

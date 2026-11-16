@@ -1,15 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/ig_request_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/download_service.dart';
+import '../../services/storage_service.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/status_chip.dart';
 import '../../utils/date_utils.dart';
+import '../../utils/validators.dart';
 import '../../services/ai_service.dart';
 import '../../utils/otp_helper.dart';
 import '../../services/meta_checker_service.dart';
@@ -101,8 +105,21 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
           );
         }
 
+        final targetDisplay = Validators.formatTelegramTargetDisplay(
+          accountType: request.accountType,
+          username: request.instagramUsername,
+        );
+        String teleActionText = notifBody;
+        if (newStatus == 'approved') {
+          teleActionText = '${user.name} đã đánh dấu OK cho $targetDisplay';
+        } else if (newStatus == 'rejected') {
+          teleActionText = '${user.name} đã đánh dấu Không OK cho $targetDisplay';
+        } else if (newStatus == 'needs_update') {
+          teleActionText = '${user.name} yêu cầu sửa $targetDisplay';
+        }
+
         notifService.sendTelegramMessage(
-          '🔔 <b>$notifTitle</b>\n$notifBody',
+          '🔔 <b>$notifTitle</b>\n$teleActionText',
           targetChatId: sender.telegramChatId,
         );
       }
@@ -158,8 +175,13 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
           );
         }
 
+        final targetDisplay = Validators.formatTelegramTargetDisplay(
+          accountType: request.accountType,
+          username: request.instagramUsername,
+        );
+
         notifService.sendTelegramMessage(
-          '💬 <b>Có phản hồi mới</b>\n${user.name} vừa gửi phản hồi cho <code>${request.instagramUsername}</code>.',
+          '💬 <b>Có phản hồi mới</b>\n${user.name} vừa gửi phản hồi cho $targetDisplay',
           targetChatId: sender.telegramChatId,
         );
       }
@@ -243,14 +265,167 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     }
   }
 
+  void _showDocumentSourceActionSheet(IGRequestModel request) {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(request.originalImageUrl.isEmpty ? 'Thêm ảnh giấy tờ xác minh' : 'Cập nhật ảnh giấy tờ xác minh'),
+        message: const Text('Chọn ảnh CCCD/Hộ chiếu để tải lên và dùng AI đọc họ tên:'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickAndAttachDocument(request, ImageSource.camera);
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.camera_alt_outlined, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Chụp ảnh giấy tờ (Camera)'),
+              ],
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickAndAttachDocument(request, ImageSource.gallery);
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.photo_library_outlined, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Chọn từ thư viện (Gallery)'),
+              ],
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          isDestructiveAction: true,
+          child: const Text('Huỷ'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndAttachDocument(IGRequestModel request, ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: source, imageQuality: 85);
+      if (pickedFile == null) return;
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Expanded(child: Text('Đang tải ảnh giấy tờ lên...')),
+            ],
+          ),
+        ),
+      );
+
+      final storageService = StorageService();
+      final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final user = authService.currentUser;
+
+      final pathBase = 'ig_requests/${request.pairId}/${request.id}';
+      final urls = await storageService.replaceImageSafely(
+        newFile: pickedFile,
+        oldOriginalPath: request.originalImagePath,
+        oldThumbnailPath: request.thumbnailImagePath,
+        newBasePath: pathBase,
+      );
+
+      int finalSizeBytes = 0;
+      if (urls.containsKey('imageSizeBytes')) {
+        finalSizeBytes = int.tryParse(urls['imageSizeBytes']!) ?? 0;
+      }
+
+      await firestoreService.attachDocumentImage(
+        requestId: request.id,
+        imageUrl: urls['originalImageUrl'] ?? '',
+        thumbnailImageUrl: urls['thumbnailImageUrl'] ?? '',
+        originalImagePath: urls['originalImagePath'] ?? '',
+        thumbnailImagePath: urls['thumbnailImagePath'] ?? '',
+        imageSizeBytes: finalSizeBytes,
+        senderId: user?.uid ?? request.senderId,
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Close upload dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã tải ảnh giấy tờ lên thành công! Đang quét tên...')),
+        );
+      }
+
+      // Automatically scan name with AI from the local picked file
+      await _scanNameFromFile(pickedFile, request);
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi tải ảnh giấy tờ: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _scanNameFromFile(XFile file, IGRequestModel request) async {
+    if (!mounted) return;
+    setState(() {
+      _isScanning = true;
+      _aiExtractedName = null;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: 20),
+            CircularProgressIndicator(color: Colors.purple),
+            SizedBox(height: 24),
+            Text(
+              'AI đang đọc họ tên từ ảnh giấy tờ...',
+              style: TextStyle(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+
+    final resultName = await AIService().extractNameFromImage(file);
+
+    if (mounted) {
+      Navigator.pop(context); // Close scanning dialog
+      _handleAiScanResult(resultName, request);
+    }
+  }
+
   Future<void> _scanNameAI() async {
-    // Read the passed request object from arguments to get the image URL
     final argRequest = ModalRoute.of(context)!.settings.arguments as IGRequestModel;
     final firestoreService = Provider.of<FirestoreService>(context, listen: false);
     final request = await firestoreService.getRequestById(argRequest.id) ?? argRequest;
     if (!mounted) return;
 
-    if (request.originalImageUrl.isEmpty) return;
+    if (request.originalImageUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa có ảnh giấy tờ để đọc. Vui lòng bấm "Thêm giấy tờ" trước!')),
+      );
+      return;
+    }
 
     setState(() {
       _isScanning = true;
@@ -260,30 +435,28 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => const AlertDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 20),
-            const CircularProgressIndicator(color: Colors.blue),
-            const SizedBox(height: 24),
-            const Text(
-              'AI đang quét đối chiếu họ tên...',
+            SizedBox(height: 20),
+            CircularProgressIndicator(color: Colors.purple),
+            SizedBox(height: 24),
+            Text(
+              'AI đang đọc họ tên từ giấy tờ...',
               style: TextStyle(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
           ],
         ),
       ),
     );
 
-    // If mock data, just use mock
     String? resultName;
     if (request.originalImageUrl.startsWith('http')) {
       resultName = await AIService().extractNameFromImageUrl(request.originalImageUrl);
     } else {
-      // Mock result because it's a local mock URL
       await Future.delayed(const Duration(milliseconds: 1500));
       final names = ['NGUYỄN VĂN TẤN', 'ĐỖ THỊ VY', 'TRẦN VĂN A', 'LÊ THỊ B'];
       resultName = names[Random().nextInt(names.length)];
@@ -291,54 +464,83 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
 
     if (mounted) {
       Navigator.pop(context);
+      _handleAiScanResult(resultName, request);
+    }
+  }
 
-      final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI');
-      if (isSuccess) {
-        await Clipboard.setData(ClipboardData(text: resultName));
-      }
+  void _handleAiScanResult(String? resultName, IGRequestModel request) {
+    final isSuccess = resultName != null && resultName != 'KHÔNG ĐỌC ĐƯỢC' && !resultName.startsWith('LỖI');
+    if (isSuccess) {
+      Clipboard.setData(ClipboardData(text: resultName));
+    }
 
-      if (!mounted) return;
-
-      setState(() {
-        _isScanning = false;
-        if (resultName == null) {
-          final names = ['NGUYỄN VĂN TẤN', 'ĐỖ THỊ VY', 'TRẦN VĂN A', 'LÊ THỊ B'];
-          _aiExtractedName = '${names[Random().nextInt(names.length)]} (MOCK)';
+    setState(() {
+      _isScanning = false;
+      if (resultName == null) {
+        _aiExtractedName = 'Chưa cấu hình API Key';
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chưa cấu hình Gemini API Key. Vui lòng vào mục Cá nhân để nhập key!')),
+        );
+      } else {
+        _aiExtractedName = resultName;
+        if (resultName.startsWith('LỖI')) {
+          final cleanMsg = resultName.replaceFirst(RegExp(r'^LỖI(_[A-Z]+)?:?\s*'), '');
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Chưa cấu hình API Key. Dùng dữ liệu giả lập.')),
+            SnackBar(
+              content: Text(cleanMsg.isNotEmpty ? cleanMsg : resultName),
+              backgroundColor: Colors.red.shade700,
+              duration: const Duration(seconds: 8),
+              action: SnackBarAction(
+                label: 'Thử lại',
+                textColor: Colors.yellowAccent,
+                onPressed: _scanNameAI,
+              ),
+            ),
           );
         } else {
-          _aiExtractedName = resultName;
-          if (resultName.startsWith('LỖI')) {
-            final cleanMsg = resultName.replaceFirst(RegExp(r'^LỖI(_[A-Z]+)?:?\s*'), '');
-            final displayMsg = cleanMsg.isNotEmpty ? cleanMsg : 'Kết nối mạng chậm, vui lòng thử lại.';
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(displayMsg),
-                backgroundColor: Colors.red.shade700,
-                duration: const Duration(seconds: 8),
-                action: SnackBarAction(
-                  label: 'Thử lại',
-                  textColor: Colors.yellowAccent,
-                  onPressed: () {
-                    _scanNameAI();
-                  },
-                ),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  isSuccess
-                      ? 'AI đã nhận diện & sao chép: $resultName'
-                      : 'AI đã nhận diện: $resultName'
-                ),
-              ),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isSuccess ? 'AI đã đọc & sao chép: $resultName' : resultName),
+              backgroundColor: isSuccess ? Colors.green.shade700 : Colors.orange.shade700,
+              duration: const Duration(seconds: 4),
+              action: isSuccess ? SnackBarAction(
+                label: 'Lưu tên',
+                textColor: Colors.yellowAccent,
+                onPressed: () {
+                  _saveExtractedNameToDisplayName(request, resultName);
+                },
+              ) : null,
+            ),
+          );
         }
-      });
+      }
+    });
+  }
+
+  Future<void> _saveExtractedNameToDisplayName(IGRequestModel request, String name) async {
+    final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser;
+    try {
+      await firestoreService.updateDisplayName(
+        requestId: request.id,
+        displayName: name,
+        userId: user?.uid ?? request.senderId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã cập nhật Tên hiển thị thành: $name'),
+            backgroundColor: Colors.teal,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi cập nhật tên: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -458,151 +660,292 @@ class _IGRequestDetailScreenState extends State<IGRequestDetailScreen> {
                       ),
                     ),
                   ),
-                  // Attachment Card
-                  if (request.originalImageUrl.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Tệp đính kèm',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
-                            ),
-                            const Divider(height: 24),
+                  // 2. Attachment / Document Card (Thêm giấy tờ & Đọc tên AI)
+                  const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.badge_outlined, color: Colors.purple, size: 22),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Giấy tờ xác minh & Đọc tên AI',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                                  ),
+                                ],
+                              ),
+                              if (request.originalImageUrl.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.green.shade300, width: 0.8),
+                                  ),
+                                  child: const Text(
+                                    'Đã có giấy tờ',
+                                    style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          if (request.originalImageUrl.isNotEmpty) ...[
+                            // Has image: show preview, info, action buttons
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
+                                color: Colors.grey.shade50,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.shade300),
+                                border: Border.all(color: Colors.grey.shade200),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(Icons.image_outlined, color: Colors.blue, size: 24),
-                                      const SizedBox(width: 8),
+                                      GestureDetector(
+                                        onTap: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/fullscreen_image',
+                                            arguments: request.originalImageUrl,
+                                          );
+                                        },
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            request.thumbnailImageUrl.isNotEmpty
+                                                ? request.thumbnailImageUrl
+                                                : request.originalImageUrl,
+                                            width: 55,
+                                            height: 55,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (ctx, err, stack) => Container(
+                                              width: 55,
+                                              height: 55,
+                                              color: Colors.grey.shade300,
+                                              child: const Icon(Icons.broken_image, color: Colors.grey),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
                                       Expanded(
-                                        child: Text(
-                                          'anh_xac_minh.jpg (Size: ${(request.imageSizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB)',
-                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Ảnh giấy tờ xác minh',
+                                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Kích thước: ${(request.imageSizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.download_rounded, color: Colors.blue, size: 20),
+                                        icon: const Icon(Icons.fullscreen, color: Colors.blueGrey),
+                                        tooltip: 'Xem toàn màn hình',
+                                        onPressed: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/fullscreen_image',
+                                            arguments: request.originalImageUrl,
+                                          );
+                                        },
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.download_rounded, color: Colors.blue),
+                                        tooltip: 'Tải về máy',
                                         onPressed: _isSubmitting ? null : () => _downloadImage(request.originalImageUrl),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                      )
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 12),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton.icon(
-                                      icon: const Icon(Icons.scanner_rounded, size: 18),
-                                      label: const Text('AI quét họ tên đối chiếu'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.purple.shade50,
-                                        foregroundColor: Colors.purple,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(vertical: 8),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          icon: const Icon(Icons.document_scanner_rounded, size: 18),
+                                          label: const Text('AI đọc họ tên'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.purple.shade50,
+                                            foregroundColor: Colors.purple.shade800,
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                              side: BorderSide(color: Colors.purple.shade200),
+                                            ),
+                                          ),
+                                          onPressed: _isScanning ? null : _scanNameAI,
                                         ),
                                       ),
-                                      onPressed: _isScanning ? null : _scanNameAI,
-                                    ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: OutlinedButton.icon(
+                                          icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                                          label: const Text('Đổi ảnh giấy tờ'),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          onPressed: _isSubmitting ? null : () => _showDocumentSourceActionSheet(request),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  if (_aiExtractedName != null) ...[
-                                    Builder(
-                                      builder: (context) {
-                                        final isError = _aiExtractedName!.startsWith('LỖI:');
-                                        return Container(
-                                          margin: const EdgeInsets.only(top: 12),
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: isError ? Colors.red.shade50 : Colors.green.shade50,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: isError ? Colors.red.shade200 : Colors.green.shade200),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    isError ? Icons.error_outline : Icons.check_circle_outline,
-                                                    color: isError ? Colors.red : Colors.green,
-                                                    size: 16,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    isError ? '[Lỗi quét AI]' : '[Kết quả quét AI]',
-                                                    style: TextStyle(
-                                                      color: isError ? Colors.red : Colors.green,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      isError
-                                                          ? 'Chi tiết lỗi: $_aiExtractedName'
-                                                          : '- Họ tên trên giấy tờ: $_aiExtractedName',
-                                                      style: TextStyle(
-                                                        color: isError ? Colors.red.shade800 : Colors.green.shade800,
-                                                        fontSize: 13,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  if (!isError && _aiExtractedName != 'KHÔNG ĐỌC ĐƯỢC') ...[
-                                                    const SizedBox(width: 8),
-                                                    GestureDetector(
-                                                      onTap: () {
-                                                        Clipboard.setData(ClipboardData(text: _aiExtractedName!));
-                                                        ScaffoldMessenger.of(context).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text('Đã sao chép họ tên từ kết quả quét AI.'),
-                                                            duration: Duration(seconds: 1),
-                                                          ),
-                                                        );
-                                                      },
-                                                      child: Icon(
-                                                        Icons.copy_rounded,
-                                                        size: 18,
-                                                        color: Colors.green.shade700,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            // Empty state: No image yet
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
+                              ),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
                                     ),
-                                  ],
+                                    child: const Icon(Icons.add_photo_alternate_outlined, color: Colors.purple, size: 32),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'Chưa có ảnh giấy tờ xác minh',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1C1C1E)),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Chụp hoặc chọn ảnh CCCD/Hộ chiếu để AI tự động nhận diện họ tên.',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                                    label: const Text('Thêm giấy tờ & Đọc tên AI'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.purple,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      elevation: 1,
+                                    ),
+                                    onPressed: _isSubmitting ? null : () => _showDocumentSourceActionSheet(request),
+                                  ),
                                 ],
                               ),
                             ),
                           ],
-                        ),
+                          if (_aiExtractedName != null) ...[
+                            Builder(
+                              builder: (context) {
+                                final isError = _aiExtractedName!.startsWith('LỖI:') || _aiExtractedName == 'Chưa cấu hình API Key';
+                                return Container(
+                                  margin: const EdgeInsets.only(top: 14),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: isError ? Colors.red.shade50 : Colors.green.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: isError ? Colors.red.shade200 : Colors.green.shade300),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            isError ? Icons.error_outline : Icons.check_circle_outline,
+                                            color: isError ? Colors.red : Colors.green.shade700,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            isError ? '[Lỗi quét AI]' : '[Kết quả quét họ tên AI]',
+                                            style: TextStyle(
+                                              color: isError ? Colors.red : Colors.green.shade800,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              isError ? _aiExtractedName! : 'Họ tên: $_aiExtractedName',
+                                              style: TextStyle(
+                                                color: isError ? Colors.red.shade900 : Colors.green.shade900,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          if (!isError && _aiExtractedName != 'KHÔNG ĐỌC ĐƯỢC') ...[
+                                            IconButton(
+                                              icon: const Icon(Icons.copy_rounded, color: Colors.green, size: 20),
+                                              tooltip: 'Sao chép',
+                                              onPressed: () {
+                                                Clipboard.setData(ClipboardData(text: _aiExtractedName!));
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Đã sao chép họ tên vào bộ nhớ tạm!'), duration: Duration(seconds: 1)),
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      if (!isError && _aiExtractedName != 'KHÔNG ĐỌC ĐƯỢC') ...[
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: TextButton.icon(
+                                            icon: const Icon(Icons.save_as_outlined, size: 16),
+                                            label: Text('Lưu "$_aiExtractedName" làm Tên hiển thị'),
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: Colors.green.shade800,
+                                              backgroundColor: Colors.white,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(8),
+                                                side: BorderSide(color: Colors.green.shade300),
+                                              ),
+                                            ),
+                                            onPressed: () => _saveExtractedNameToDisplayName(request, _aiExtractedName!),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                   // 2. Credentials Card
                   if (request.password.isNotEmpty || request.twoFactorKey.isNotEmpty || request.cookie.isNotEmpty || request.email.isNotEmpty) ...[
                     const SizedBox(height: 16),

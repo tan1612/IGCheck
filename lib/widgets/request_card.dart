@@ -56,10 +56,18 @@ class RequestCard extends StatelessWidget {
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE5E5EA),
+                    color: Colors.purple.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
                   ),
-                  child: const Icon(Icons.image, color: Color(0xFF8E8E93)),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_a_photo_outlined, color: Colors.purple, size: 22),
+                      SizedBox(height: 2),
+                      Text('+ Giấy tờ', style: TextStyle(fontSize: 9, color: Colors.purple, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 12),
               ],

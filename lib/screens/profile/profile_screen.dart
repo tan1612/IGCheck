@@ -1,6 +1,7 @@
 import 'dart:io' show Platform, Process;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
@@ -20,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
   final _telegramController = TextEditingController();
   final _partnerEmailController = TextEditingController();
+  final _geminiKeyController = TextEditingController();
   final _pairingFormKey = GlobalKey<FormState>();
   final _imageService = ImageService();
   final StorageService _storageService = StorageService();
@@ -27,14 +29,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isPairing = false;
+  bool _obscureGeminiKey = true;
   String _pairingError = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = Provider.of<AuthService>(context, listen: false).currentUser;
+      if (user?.geminiApiKey?.isNotEmpty == true && _geminiKeyController.text.isEmpty) {
+        _geminiKeyController.text = user!.geminiApiKey!;
+      }
+    });
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _telegramController.dispose();
     _partnerEmailController.dispose();
+    _geminiKeyController.dispose();
     super.dispose();
+  }
+
+  void _saveGeminiApiKey() {
+    final key = _geminiKeyController.text.trim();
+    final authService = Provider.of<AuthService>(context, listen: false);
+    authService.updateGeminiApiKey(key);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(key.isEmpty ? 'Đã xoá Gemini API Key' : 'Đã cập nhật Gemini API Key thành công!'),
+        backgroundColor: Colors.teal,
+      ),
+    );
   }
 
   Future<void> _changeAvatar() async {
@@ -303,6 +330,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ],
                           ),
                         ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Gemini AI API Key Card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome,
+                                color: Colors.purple,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Google Gemini AI (Đọc họ tên)',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1C1C1E),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    user?.geminiApiKey?.isNotEmpty == true
+                                        ? 'Đã cấu hình API Key'
+                                        : 'Chưa cấu hình API Key',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: user?.geminiApiKey?.isNotEmpty == true
+                                          ? Colors.green
+                                          : Colors.orange.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: user?.geminiApiKey?.isNotEmpty == true
+                                    ? Colors.green.shade50
+                                    : Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: user?.geminiApiKey?.isNotEmpty == true
+                                      ? Colors.green.shade300
+                                      : Colors.orange.shade300,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                user?.geminiApiKey?.isNotEmpty == true ? 'Đang hoạt động' : 'Chưa kích hoạt',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: user?.geminiApiKey?.isNotEmpty == true ? Colors.green.shade800 : Colors.orange.shade900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        const Text(
+                          'Cấu hình API Key của bạn để AI tự động đọc và nhận diện họ tên từ ảnh giấy tờ (CCCD / Passport):',
+                          style: TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _geminiKeyController,
+                          obscureText: _obscureGeminiKey,
+                          decoration: InputDecoration(
+                            labelText: 'Gemini API Key',
+                            hintText: 'Dán API Key dạng AIzaSy...',
+                            prefixIcon: const Icon(Icons.key_rounded, color: Colors.purple),
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    _obscureGeminiKey ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                    color: Colors.grey,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => setState(() => _obscureGeminiKey = !_obscureGeminiKey),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.paste_rounded, color: Colors.purple, size: 20),
+                                  tooltip: 'Dán từ bộ nhớ tạm',
+                                  onPressed: () async {
+                                    final data = await Clipboard.getData('text/plain');
+                                    final text = data?.text?.trim() ?? '';
+                                    if (text.isNotEmpty) {
+                                      _geminiKeyController.text = text;
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.save_rounded, size: 18),
+                            label: const Text('Lưu API Key'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: _saveGeminiApiKey,
+                          ),
+                        ),
                       ],
                     ),
                   ),

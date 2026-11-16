@@ -5,6 +5,7 @@ import '../../models/ig_request_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
+import '../../utils/validators.dart';
 import '../../widgets/app_button.dart';
 import '../inbox/inbox_screen.dart';
 import '../sent/sent_screen.dart';
@@ -102,8 +103,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           final partner = authService.getUserById(user.partnerId ?? '');
           final serviceLabel = req.accountType == 'instagram' ? 'Instagram' : 'Facebook';
+          final targetDisplay = Validators.formatTelegramTargetDisplay(
+            accountType: req.accountType,
+            username: req.instagramUsername,
+          );
           final textMsg = '🎉 <b>TÀI KHOẢN ĐẠT TÍCH XANH!</b> 🎉\n'
-              'Tài khoản $serviceLabel <code>${req.instagramUsername}</code> vừa được hệ thống phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!';
+              'Tài khoản $serviceLabel $targetDisplay vừa được hệ thống phát hiện đã có <b>TÍCH XANH (Verified Badge)</b> thành công!';
 
           if (partner != null && partner.telegramChatId != null && partner.telegramChatId!.isNotEmpty) {
             await notifService.sendTelegramMessage(textMsg, targetChatId: partner.telegramChatId);

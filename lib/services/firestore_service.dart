@@ -383,6 +383,82 @@ class FirestoreService extends ChangeNotifier {
     }
   }
 
+  Future<void> attachDocumentImage({
+    required String requestId,
+    required String imageUrl,
+    required String thumbnailImageUrl,
+    required String originalImagePath,
+    required String thumbnailImagePath,
+    required int imageSizeBytes,
+    String? newDisplayName,
+    required String senderId,
+  }) async {
+    if (useFirebase) {
+      final docRef = FirebaseFirestore.instance.collection('requests').doc(requestId);
+      final updateData = <String, dynamic>{
+        'originalImageUrl': imageUrl,
+        'thumbnailImageUrl': thumbnailImageUrl,
+        'originalImagePath': originalImagePath,
+        'thumbnailImagePath': thumbnailImagePath,
+        'imageSizeBytes': imageSizeBytes,
+        'lastUpdatedBy': senderId,
+        'lastAction': 'updated_image',
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (newDisplayName != null && newDisplayName.trim().isNotEmpty) {
+        updateData['displayName'] = newDisplayName.trim();
+      }
+      await docRef.update(updateData);
+    } else {
+      final index = _requests.indexWhere((r) => r.id == requestId);
+      if (index != -1) {
+        final existing = _requests[index];
+        final updated = existing.copyWith(
+          originalImageUrl: imageUrl,
+          thumbnailImageUrl: thumbnailImageUrl,
+          originalImagePath: originalImagePath,
+          thumbnailImagePath: thumbnailImagePath,
+          imageSizeBytes: imageSizeBytes,
+          displayName: (newDisplayName != null && newDisplayName.trim().isNotEmpty)
+              ? newDisplayName.trim()
+              : existing.displayName,
+          lastUpdatedBy: senderId,
+          lastAction: 'updated_image',
+          updatedAt: DateTime.now(),
+        );
+        _requests[index] = updated;
+        _notifySubscriptions();
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> updateDisplayName({
+    required String requestId,
+    required String displayName,
+    required String userId,
+  }) async {
+    if (useFirebase) {
+      await FirebaseFirestore.instance.collection('requests').doc(requestId).update({
+        'displayName': displayName.trim(),
+        'lastUpdatedBy': userId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      final index = _requests.indexWhere((r) => r.id == requestId);
+      if (index != -1) {
+        final existing = _requests[index];
+        _requests[index] = existing.copyWith(
+          displayName: displayName.trim(),
+          lastUpdatedBy: userId,
+          updatedAt: DateTime.now(),
+        );
+        _notifySubscriptions();
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> updateCookieOnly({
     required String requestId,
     required String cookie,

@@ -205,11 +205,16 @@ class _EditIGRequestScreenState extends State<EditIGRequestScreen> {
             request.id,
           );
           
+          final targetDisplay = Validators.formatTelegramTargetDisplay(
+            accountType: request.accountType,
+            username: normalizedUsername,
+          );
+
           final telegramMsg = isVerified
               ? '🌟 <b>CẬP NHẬT HỒ SƠ TÍCH XANH</b> 🌟\n'
-                '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel có <b>TÍCH XANH (Verified Badge)</b> cho <code>$normalizedUsername</code>.'
+                '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel có <b>TÍCH XANH (Verified Badge)</b> cho $targetDisplay'
               : '🔔 <b>Cập nhật hồ sơ</b>\n'
-                '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel cho <code>$normalizedUsername</code>.';
+                '${user.name} vừa gửi lại bản cập nhật hồ sơ $serviceLabel cho $targetDisplay';
 
           notifService.sendTelegramMessage(
             telegramMsg,
